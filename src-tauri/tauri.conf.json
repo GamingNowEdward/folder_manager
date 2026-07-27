@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicovrc/tauri-plugin-config-schema/refs/heads/main/schema.json",
+  "productName": "Folder Manager",
+  "version": "1.0.0",
+  "identifier": "com.folder-manager.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Folder Manager",
+        "width": 820,
+        "height": 620,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "center": true,
+        "minWidth": 420,
+        "minHeight": 280
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "msi",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  }
+}
