@@ -169,8 +169,8 @@ function onFolderDialogConfirm(result: { name: string; path: string }): void {
 function onOpenFolder(path: string): void {
   invoke('open_folder', { path }).then(() => {
     store.setStatus(`▶ 已打开文件夹：${path}`)
-  }).catch(() => {
-    store.setStatus(`✕ 打开文件夹失败`)
+  }).catch((err) => {
+    store.setStatus(`✕ ${err}`)
   })
 }
 

@@ -7,6 +7,7 @@ A quick-access folder manager — organize your frequently used folders into "pr
 ## Features
 
 - **Project groups**: Create separate projects for different workstreams or scenarios, each with its own set of folders
+- **Smooth project switching**: Cross-fade transition when switching between projects
 - **Quick access**: Double-click a card to open the folder in File Explorer; right-click or use the button to copy its path
 - **Multiple ways to add**: Add via dialog, browse to pick a directory, or drag folders straight in from File Explorer
 - **Drag to reorder**: Grab a card and drag it to a new position, with smooth FLIP animations

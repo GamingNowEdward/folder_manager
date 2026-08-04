@@ -2,6 +2,12 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
 }
 
 html, body, #app {
@@ -28,7 +34,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: rgba(32, 32, 36, 0.65);
+  background: rgba(32, 32, 36, 0.5);
 }
 
 .app-body {
