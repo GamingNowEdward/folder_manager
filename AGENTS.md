@@ -64,7 +64,9 @@
 
 ## 版本与发布
 - 版本唯一来源：`package.json` 的 `version`；`tauri.conf.json` 通过 `"version": "../package.json"` 引用它。
-- 发布流程：更新 `docs/CHANGELOG.md`（人工撰写目标版本段落）并提交 → 运行 `npm run release -- patch|minor|major`（自动跑质量门禁、同步版本文件、提交、打 tag、推送）→ GitHub Actions 构建并创建 **draft** Release（说明自动截取自 `docs/CHANGELOG.md`）→ 人工确认后发布。
+- 日常在 `docs/CHANGELOG.md` 的 `## [Unreleased]` 下追加变更条目并提交（人工撰写）。
+- 发布：运行 `npm run release -- patch|minor|major`，脚本自动跑质量门禁、把 `[Unreleased]` 提升为 `## [x.y.z] - 日期`（保留新的空 `[Unreleased]`）、同步版本文件、提交、打 tag、推送 → GitHub Actions 构建并创建 **draft** Release（说明自动截取自 `docs/CHANGELOG.md`）→ 人工确认后发布。
+- 也可手动撰写 `## [x.y.z]` 段落：脚本将跳过提升，不再改动 `[Unreleased]`；`[Unreleased]` 存在但无条目时脚本会报错阻止发布。
 - `scripts/release.mjs` 要求工作区干净、`main` 分支且与 `origin/main` 同步；支持 `--dry-run`（预演）与 `--skip-checks`（应急跳过门禁）。
 - 手动替代路径：`npm version x.y.z --no-git-tag-version` → `npm run version:check` → commit → `git tag vX.Y.Z` → push tag。
 - tag 与 `package.json` 版本不一致时 release workflow 会直接失败。

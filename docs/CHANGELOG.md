@@ -9,6 +9,7 @@
 ### Added
 
 - 本地一键发布脚本 `npm run release -- patch|minor|major`：自动执行质量门禁、同步版本文件（`package.json` / `Cargo.toml` / `Cargo.lock`）、提交、打 tag 并推送；CHANGELOG 仍由人工撰写并由脚本校验。
+- 发布脚本支持将 `[Unreleased]` 自动提升为 `## [x.y.z] - 日期`（并保留新的空 `[Unreleased]`），发布前无需手工修改版本标题。
 
 ## [1.1.0] - 2026-09-12
 

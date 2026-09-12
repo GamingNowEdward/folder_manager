@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -65,15 +65,31 @@ const packageVersion = JSON.parse(readFileSync(resolve(root, 'package.json'), 'u
 const targetVersion = nextVersion(packageVersion, bumpType)
 const targetTag = `v${targetVersion}`
 
-console.log('\n[2/5] CHANGELOG 校验')
-const changelog = readFileSync(resolve(root, 'docs', 'CHANGELOG.md'), 'utf8')
+console.log('\n[2/5] CHANGELOG 准备')
+const changelogPath = resolve(root, 'docs', 'CHANGELOG.md')
+const changelog = readFileSync(changelogPath, 'utf8')
 const versionHeading = new RegExp(`^## \\[${targetVersion.replaceAll('.', '\\.')}\\]`, 'm')
-if (!versionHeading.test(changelog)) {
+const unreleasedHeading = /^## \[Unreleased\][^\n]*$/m
+const unreleasedMatch = unreleasedHeading.exec(changelog)
+
+let promoteUnreleased = false
+if (versionHeading.test(changelog)) {
+  console.log(`CHANGELOG 已包含 [${targetVersion}]，保持 [Unreleased] 不变`)
+} else if (unreleasedMatch) {
+  const sectionStart = unreleasedMatch.index + unreleasedMatch[0].length
+  const rest = changelog.slice(sectionStart)
+  const nextHeadingIndex = rest.search(/^## \[/m)
+  const sectionBody = (nextHeadingIndex < 0 ? rest : rest.slice(0, nextHeadingIndex)).trim()
+  if (!sectionBody) {
+    fail('[Unreleased] 下没有变更条目。请先撰写本次版本的变更说明并提交，再重新运行发布。')
+  }
+  promoteUnreleased = true
+  console.log(`将在版本更新阶段把 [Unreleased] 提升为 [${targetVersion}]`)
+} else {
   fail(
-    `docs/CHANGELOG.md 中缺少 ## [${targetVersion}] 段落。\n  请先补写该版本说明并提交，再重新运行发布。`
+    'docs/CHANGELOG.md 中既没有 [Unreleased] 也没有目标版本段落。\n  请在 [Unreleased] 下撰写变更说明并提交，再重新运行发布。'
   )
 }
-console.log(`CHANGELOG 已包含 [${targetVersion}]`)
 
 console.log('\n[3/5] 质量门禁')
 if (skipChecks) {
@@ -88,6 +104,7 @@ if (skipChecks) {
 }
 
 let versionBumped = false
+let changelogWritten = false
 try {
   console.log('\n[4/5] 版本更新')
   run(`npm version ${bumpType} --no-git-tag-version`)
@@ -96,8 +113,28 @@ try {
   run('cargo check --all-features --quiet', { cwd: srcTauriDir })
   run('node scripts/check-version.mjs')
 
+  if (promoteUnreleased) {
+    const releaseDate = new Date().toLocaleDateString('sv-SE')
+    if (dryRun) {
+      console.log(
+        `\n[dry-run] 将把 [Unreleased] 提升为 ## [${targetVersion}] - ${releaseDate}，并保留新的空 [Unreleased]`
+      )
+    } else {
+      const head = changelog.slice(0, unreleasedMatch.index)
+      const tail = changelog.slice(unreleasedMatch.index + unreleasedMatch[0].length)
+      writeFileSync(
+        changelogPath,
+        `${head}## [Unreleased]\n\n## [${targetVersion}] - ${releaseDate}${tail}`
+      )
+      changelogWritten = true
+      console.log(`\n已将 [Unreleased] 提升为 ## [${targetVersion}] - ${releaseDate}`)
+    }
+  }
+
   console.log('\n[5/5] 提交与推送')
-  run('git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock')
+  run(
+    'git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock docs/CHANGELOG.md'
+  )
   run(`git commit -m "chore(release): ${targetTag}"`)
   run(`git tag -a ${targetTag} -m "Folder Manager ${targetVersion}"`)
   run('git push origin main --follow-tags')
@@ -109,6 +146,11 @@ try {
     console.error(`  git tag --list "${targetTag}"`)
     console.error('  git reset --hard HEAD~1   # 回滚最近一次发布提交（确认无其他改动后使用）')
     console.error(`  git tag -d ${targetTag}    # 删除本地 tag`)
+  }
+  if (changelogWritten) {
+    console.error(
+      'docs/CHANGELOG.md 已被提升为版本段落，如需恢复：git checkout -- docs/CHANGELOG.md'
+    )
   }
   process.exit(1)
 }
