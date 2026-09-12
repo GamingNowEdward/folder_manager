@@ -169,8 +169,10 @@ async fn agent_workflow_over_real_http() {
     assert_eq!(again["id"], folder_id);
 
     // GET /api/folders?path=...
-    let encoded =
-        crate::infrastructure::http::testing::encode_query_value(dir.to_string_lossy().as_ref());
+    // 搜索用的必须是 API 返回的规范化路径：调用方传进去的原始写法（含临时目录短名/大小写）
+    // 可能和 canonicalize 结果不同，拿原始串搜不到东西是正常行为，不是 API 的问题。
+    let stored_path = folder["path"].as_str().unwrap().to_string();
+    let encoded = crate::infrastructure::http::testing::encode_query_value(&stored_path);
     let (status, body) = api.get(&format!("/folders?path={encoded}")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["matches"].as_array().unwrap().len(), 1);
