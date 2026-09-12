@@ -34,7 +34,6 @@ jobs:
           workspaces: src-tauri
       - run: npm ci
       - name: Extract release notes from CHANGELOG
-        id: notes
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
@@ -42,20 +41,20 @@ jobs:
           $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\n]*\n(.*?)(?=^## \[|\z)"
           $match = [regex]::Match($content, $pattern)
           if (-not $match.Success) { throw "CHANGELOG 中未找到版本 $version 的条目" }
-          $body = $match.Groups[2].Value.Trim()
-          $delimiter = "EOF_$([guid]::NewGuid().ToString('N'))"
-          "body<<$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $match.Groups[1].Value.Trim() | Out-File -FilePath release-notes.md -Encoding utf8
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Folder Manager __VERSION__'
-          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
+      - name: Apply release notes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --notes-file release-notes.md
       - name: Package portable exe
         shell: pwsh
         run: Compress-Archive -Path src-tauri/target/release/folder-manager.exe -DestinationPath folder-manager-portable.zip -Force
