@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{BytesRejection, FailedToBufferBody, JsonRejection};
 use axum::extract::{FromRequest, Path, Query, Request, State};
 use axum::http::{StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
@@ -32,6 +32,11 @@ impl ApiState {
 }
 
 /// 组装 API 路由（测试直接对它发起请求，`server` 负责把它绑定到 127.0.0.1）。
+///
+/// 认证边界：目前只依赖「仅监听回环地址」，没有 Token。
+/// 未来要加 `Authorization: Bearer <token>` 时，在这一层插入
+/// `axum::middleware::from_fn`（或任意 tower middleware）即可，
+/// `application` / `domain` 层完全不需要改动 —— handler 只调用 `ConfigService`。
 pub fn router(state: ApiState) -> Router {
     let allowed_origins = cors::allowed_origins_from_env();
     let api = Router::new()
@@ -111,6 +116,27 @@ fn map_json_rejection(rejection: JsonRejection) -> ApiError {
         JsonRejection::JsonSyntaxError(_) => {
             ApiError::bad_request("MALFORMED_JSON", "请求体不是合法 JSON")
         }
+        JsonRejection::BytesRejection(bytes) => map_bytes_rejection(bytes),
+        other => ApiError::bad_request("INVALID_ARGUMENT", other.body_text()),
+    }
+}
+
+fn map_bytes_rejection(rejection: BytesRejection) -> ApiError {
+    let failure = match rejection {
+        BytesRejection::FailedToBufferBody(failure) => failure,
+        // `BytesRejection` 目前只有这一个变体；保留兜底分支以便上游新增变体时仍能编译
+        other => return ApiError::bad_request("INVALID_ARGUMENT", other.body_text()),
+    };
+    match failure {
+        // 命中 `DefaultBodyLimit`：明确告诉 Agent 是 body 太大（413），而不是参数错误
+        FailedToBufferBody::LengthLimitError(_) => ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "PAYLOAD_TOO_LARGE",
+            format!("请求体超过上限 {MAX_BODY_BYTES} 字节"),
+        ),
+        FailedToBufferBody::UnknownBodyError(error) => {
+            ApiError::bad_request("INVALID_ARGUMENT", error.body_text())
+        }
         other => ApiError::bad_request("INVALID_ARGUMENT", other.body_text()),
     }
 }
@@ -161,19 +187,82 @@ pub struct RemovedView {
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub ok: bool,
-    pub version: &'static str,
+    pub server_version: &'static str,
     pub api_version: &'static str,
     pub revision: u64,
 }
 
-#[derive(Debug, Serialize)]
+/// 能力自描述。字段只增不改，Agent 可以长期依赖。
+#[derive(Debug, Clone, Serialize)]
 pub struct CapabilitiesResponse {
     pub name: &'static str,
-    pub version: &'static str,
     pub api_version: &'static str,
-    pub base_url: &'static str,
-    pub capabilities: [&'static str; 6],
+    pub server_version: &'static str,
+    /// 本次请求实际使用的 base URL（含真实端口，端口顺延后依然正确）。
+    pub base_url: String,
+    pub capabilities: Vec<Capability>,
+    pub security: SecurityView,
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Capability {
+    pub id: &'static str,
+    pub method: &'static str,
+    pub path: &'static str,
+    pub description: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SecurityView {
+    /// 只监听回环地址。
+    pub bind_address: &'static str,
+    /// 当前版本没有认证。
+    pub authentication: &'static str,
+    /// 删除只作用于配置，不作用于文件系统。
+    pub deletes_real_folders: bool,
+    pub path_policy: &'static str,
+    pub max_body_bytes: usize,
+}
+
+/// 能力清单同时用于 `GET /api` 响应与文档一致性测试。
+pub const CAPABILITIES: [Capability; 6] = [
+    Capability {
+        id: "list_projects",
+        method: "GET",
+        path: "/api/projects",
+        description: "列出所有项目及其文件夹",
+    },
+    Capability {
+        id: "create_project",
+        method: "POST",
+        path: "/api/projects",
+        description: "创建项目",
+    },
+    Capability {
+        id: "delete_project",
+        method: "DELETE",
+        path: "/api/projects/{project_id}",
+        description: "删除项目记录（不删除真实文件夹）",
+    },
+    Capability {
+        id: "add_folder",
+        method: "POST",
+        path: "/api/projects/{project_id}/folders",
+        description: "把已存在的绝对路径目录加入项目（相同 path 幂等）",
+    },
+    Capability {
+        id: "remove_folder",
+        method: "DELETE",
+        path: "/api/projects/{project_id}/folders/{folder_id}",
+        description: "从项目中移除文件夹引用（不删除真实文件夹）",
+    },
+    Capability {
+        id: "search_folder",
+        method: "GET",
+        path: "/api/folders?path=",
+        description: "按路径子串搜索文件夹",
+    },
+];
 
 #[derive(Debug, Serialize)]
 pub struct FolderSearchResponse {
@@ -231,27 +320,40 @@ pub struct AddFolderRequest {
 
 // ---------------------------------------------------------------- 处理器
 
-async fn capabilities(State(state): State<ApiState>) -> Json<CapabilitiesResponse> {
+async fn capabilities(
+    State(state): State<ApiState>,
+    headers: axum::http::HeaderMap,
+) -> Json<CapabilitiesResponse> {
     Json(CapabilitiesResponse {
         name: API_NAME,
-        version: state.version,
         api_version: API_VERSION,
-        base_url: "/api",
-        capabilities: [
-            "list_projects",
-            "create_project",
-            "delete_project",
-            "add_folder",
-            "remove_folder",
-            "search_folder",
-        ],
+        server_version: state.version,
+        base_url: base_url(&headers),
+        capabilities: CAPABILITIES.to_vec(),
+        security: SecurityView {
+            bind_address: "127.0.0.1 (loopback only)",
+            authentication: "none",
+            deletes_real_folders: false,
+            path_policy: "absolute existing directory path; canonicalized; relative paths rejected",
+            max_body_bytes: MAX_BODY_BYTES,
+        },
     })
+}
+
+/// 用请求的 `Host` 头拼出 base URL：端口顺延后 Agent 依然能拿到可用的地址。
+fn base_url(headers: &axum::http::HeaderMap) -> String {
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .filter(|host| !host.is_empty())
+        .unwrap_or("127.0.0.1");
+    format!("http://{host}/api")
 }
 
 async fn health(State(state): State<ApiState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         ok: true,
-        version: state.version,
+        server_version: state.version,
         api_version: API_VERSION,
         revision: state.service.revision(),
     })
@@ -367,7 +469,7 @@ async fn delete_folder_by_id(
     validate_id("folder_id", &folder_id)?;
     let folder = state
         .service
-        .remove_folder_by_id(&project_id, &folder_id)
+        .remove_folder_reference_by_id(&project_id, &folder_id)
         .map_err(reject)?;
     Ok(Json(DeleteResponse {
         ok: true,
@@ -396,7 +498,7 @@ async fn delete_folder_from_query(
     let path = paths::normalize_stored_path(path).map_err(reject)?;
     let folder = state
         .service
-        .remove_folder_by_path(&project_id, &path)
+        .remove_folder_reference_by_path(&project_id, &path)
         .map_err(reject)?;
     Ok(Json(DeleteResponse {
         ok: true,
@@ -529,7 +631,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
-        assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(body["server_version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(body["api_version"], "1");
         assert!(body["revision"].as_u64().is_some());
     }
@@ -542,7 +644,13 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["name"], API_NAME);
         assert_eq!(body["api_version"], "1");
+        assert_eq!(body["server_version"], env!("CARGO_PKG_VERSION"));
+        assert!(body["base_url"]
+            .as_str()
+            .is_some_and(|it| it.starts_with("http://") && it.ends_with("/api")));
+
         let capabilities = body["capabilities"].as_array().unwrap();
+        assert_eq!(capabilities.len(), CAPABILITIES.len());
         for expected in [
             "list_projects",
             "create_project",
@@ -551,9 +659,41 @@ mod tests {
             "remove_folder",
             "search_folder",
         ] {
+            let entry = capabilities
+                .iter()
+                .find(|item| item["id"] == expected)
+                .unwrap_or_else(|| panic!("缺少 capability: {expected}"));
+            // Agent 需要能直接照着 method + path 调用
+            assert!(entry["method"].as_str().is_some_and(|it| !it.is_empty()));
+            assert!(entry["path"]
+                .as_str()
+                .is_some_and(|it| it.starts_with("/api")));
+            assert!(entry["description"]
+                .as_str()
+                .is_some_and(|it| !it.is_empty()));
+        }
+
+        // 安全模型必须自描述，避免 Agent 误以为它能操作文件系统
+        assert_eq!(body["security"]["deletes_real_folders"], false);
+        assert_eq!(body["security"]["authentication"], "none");
+        assert!(body["security"]["bind_address"]
+            .as_str()
+            .is_some_and(|it| it.contains("127.0.0.1")));
+        assert_eq!(body["security"]["max_body_bytes"], MAX_BODY_BYTES);
+    }
+
+    /// 文档 / 代码一致性：`docs/API.md` 必须列出每个真实 endpoint。
+    #[test]
+    fn api_documentation_lists_every_capability() {
+        let docs = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/API.md"))
+            .expect("docs/API.md 必须存在");
+
+        for capability in CAPABILITIES {
             assert!(
-                capabilities.iter().any(|item| item == expected),
-                "缺少 capability: {expected}"
+                docs.contains(capability.path),
+                "docs/API.md 缺少 endpoint: {} {}",
+                capability.method,
+                capability.path
             );
         }
     }
@@ -1051,5 +1191,227 @@ mod tests {
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"]["code"], "INVALID_ARGUMENT");
+    }
+
+    /// Agent 常见错误输入：缺字段、空串、全空格，都必须给出稳定的 400 + code。
+    #[tokio::test]
+    async fn rejects_missing_and_blank_fields() {
+        let fixture = Fixture::new();
+        let project_id = fixture.current_project_id().to_string();
+
+        let cases = [
+            serde_json::json!({}),
+            serde_json::json!({ "name": "" }),
+            serde_json::json!({ "name": "   " }),
+        ];
+        for payload in cases {
+            let (status, body) = fixture.post_json("/api/projects", payload.clone()).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "payload = {}", payload);
+            assert_eq!(
+                body["error"]["code"], "INVALID_ARGUMENT",
+                "payload = {}",
+                payload
+            );
+        }
+
+        let folder_cases = [
+            serde_json::json!({}),
+            serde_json::json!({ "path": "" }),
+            serde_json::json!({ "path": "   " }),
+        ];
+        for payload in folder_cases {
+            let (status, body) = fixture
+                .post_json(
+                    &format!("/api/projects/{project_id}/folders"),
+                    payload.clone(),
+                )
+                .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "payload = {}", payload);
+            assert!(
+                matches!(
+                    body["error"]["code"].as_str(),
+                    Some("INVALID_ARGUMENT" | "INVALID_PATH")
+                ),
+                "payload = {}, body = {}",
+                payload,
+                body
+            );
+        }
+
+        // 空 name 覆盖 PUT
+        let (status, body) = fixture
+            .put_json(
+                &format!("/api/projects/{project_id}"),
+                serde_json::json!({ "name": "  " }),
+            )
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"]["code"], "INVALID_ARGUMENT");
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_body_with_413() {
+        let fixture = Fixture::new();
+        // 超过 64 KiB 上限
+        let oversized = "x".repeat(MAX_BODY_BYTES + 1024);
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/api/projects")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({ "name": oversized }).to_string(),
+            ))
+            .unwrap();
+
+        let response = fixture.router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(body["error"]["code"], "PAYLOAD_TOO_LARGE");
+        // 命中上限时不应该写入任何数据
+        assert_eq!(fixture.service.load().unwrap().projects.len(), 2);
+    }
+
+    /// 两个删除 endpoint 对「不存在」必须给出一致结果。
+    #[tokio::test]
+    async fn both_delete_endpoints_agree_on_missing_folder() {
+        let fixture = Fixture::new();
+        let project_id = fixture.current_project_id().to_string();
+
+        let (by_id_status, by_id_body) = fixture
+            .delete(&format!("/api/projects/{project_id}/folders/missing"))
+            .await;
+        let (by_path_status, by_path_body) = fixture
+            .delete(&format!(
+                "/api/projects/{project_id}/folders?path={}",
+                encode_query_value("C:\\work\\missing")
+            ))
+            .await;
+
+        assert_eq!(by_id_status, StatusCode::NOT_FOUND);
+        assert_eq!(by_path_status, StatusCode::NOT_FOUND);
+        assert_eq!(by_id_body["error"]["code"], "FOLDER_NOT_FOUND");
+        assert_eq!(by_path_body["error"]["code"], "FOLDER_NOT_FOUND");
+    }
+
+    /// 最强安全测试：真实目录 + 目录内文件，删除引用后文件系统必须原封不动。
+    #[tokio::test]
+    async fn removing_folder_reference_never_touches_the_filesystem() {
+        let fixture = Fixture::new();
+        let (project_id, dir) = fixture.new_directory("keep-me");
+        let marker = dir.join("marker.txt");
+        std::fs::write(&marker, "do not delete me").unwrap();
+        let nested = dir.join("nested");
+        std::fs::create_dir(&nested).unwrap();
+
+        let (status, folder) = fixture
+            .post_json(
+                &format!("/api/projects/{project_id}/folders"),
+                serde_json::json!({ "path": dir.to_string_lossy() }),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let folder_id = folder["id"].as_str().unwrap().to_string();
+
+        let (status, _) = fixture
+            .delete(&format!("/api/projects/{project_id}/folders/{folder_id}"))
+            .await;
+        assert_eq!(status, StatusCode::OK);
+
+        // 目录、子目录与文件都必须还在，内容也没变
+        assert_directory_survives(&dir);
+        assert_directory_survives(&nested);
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            "do not delete me"
+        );
+
+        // 按 path 删除同样不碰文件系统
+        let (status, folder) = fixture
+            .post_json(
+                &format!("/api/projects/{project_id}/folders"),
+                serde_json::json!({ "path": dir.to_string_lossy() }),
+            )
+            .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let stored_path = folder["path"].as_str().unwrap();
+        let (status, _) = fixture
+            .delete(&format!(
+                "/api/projects/{project_id}/folders?path={}",
+                encode_query_value(stored_path)
+            ))
+            .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_directory_survives(&dir);
+        assert!(marker.is_file());
+
+        // 删除项目同样只删配置
+        let (status, _) = fixture.delete(&format!("/api/projects/{project_id}")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_directory_survives(&dir);
+        assert!(marker.is_file());
+    }
+
+    /// 目录刚被删除时，添加请求必须给出 400 而不是 500。
+    #[tokio::test]
+    async fn path_removed_between_check_and_canonicalize_is_a_client_error() {
+        let fixture = Fixture::new();
+        let project_id = fixture.current_project_id().to_string();
+
+        let (status, body) = fixture
+            .post_json(
+                &format!("/api/projects/{project_id}/folders"),
+                serde_json::json!({ "path": "C:\\definitely\\missing\\dir" }),
+            )
+            .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"]["code"], "PATH_NOT_FOUND");
+    }
+
+    /// 冗余的路径写法不能产生重复记录。
+    #[tokio::test]
+    async fn redundant_path_notations_are_deduplicated() {
+        let fixture = Fixture::new();
+        let (project_id, dir) = fixture.new_directory("notation");
+        let url = format!("/api/projects/{project_id}/folders");
+
+        let plain = dir.to_string_lossy().to_string();
+        let variants = [
+            plain.clone(),
+            plain.to_uppercase(),
+            plain.replace('\\', "/"),
+            format!("{plain}\\"),
+            format!("{plain}\\."),
+            format!(r"\\?\{plain}"),
+        ];
+
+        let mut ids = Vec::new();
+        for (index, variant) in variants.iter().enumerate() {
+            let (status, body) = fixture
+                .post_json(&url, serde_json::json!({ "path": variant }))
+                .await;
+            let expected = if index == 0 {
+                StatusCode::CREATED
+            } else {
+                StatusCode::OK
+            };
+            assert_eq!(status, expected, "variant = {variant}");
+            ids.push(body["id"].as_str().unwrap().to_string());
+        }
+
+        assert!(
+            ids.iter().all(|id| *id == ids[0]),
+            "同一目录的不同写法必须命中同一条记录: {ids:?}"
+        );
+        let stored = fixture.service.load().unwrap();
+        let project = stored
+            .projects
+            .iter()
+            .find(|it| it.id == project_id)
+            .unwrap();
+        assert_eq!(project.folders.len(), 2, "只有 work-src 与 notation 两条");
     }
 }

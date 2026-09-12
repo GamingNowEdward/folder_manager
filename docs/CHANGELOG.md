@@ -23,6 +23,25 @@
 
 - `lib.rs` 改用 `build()` + `run(callback)`，在 `RunEvent::Exit` 时优雅关闭 HTTP server。
 - `ConfigService::initialize` 增加可选的变更事件出口（`ChangeSink`），application 层不直接依赖 Tauri。
+- `GET /api` 返回 `server_version`（原 `version`）、可用的绝对 `base_url`，以及结构化的 `capabilities`（含 method / path / description）与 `security`（bind address、认证、是否删除真实目录、路径策略、body 上限）。
+- `GET /api/health` 的版本字段更名为 `server_version`（与 `GET /api` 一致）。
+- 删除相关方法改名为 `remove_folder_reference_by_id` / `remove_folder_reference_by_path`，从命名上明确「只删除引用，不删除真实目录」。
+
+### Fixed
+
+- **并发写丢失**：`ConfigService` 的 mutation 与落盘现在在同一个事务（同一把锁）内完成，消除了「读旧快照 → 释放锁 → 写回」的窗口；并发 add/delete 不再互相覆盖，`revision` 单调递增且只为成功修改递增。
+- **写盘失败后的状态不一致**：只有落盘成功才提交内存状态；失败时回滚到最近一次成功落盘的状态、不改 `revision`、不广播 `workspace-changed`，API 返回 500，`GET` 结果始终与磁盘一致。
+- **Windows 路径等价**：`\\?\C:\x` 与 `C:\x`、`\\?\UNC\server\share` 与 `\\server\share` 现在被视为同一路径，不再产生重复记录。
+- 超大请求体改为返回 `413 PAYLOAD_TOO_LARGE`（此前是 400），并新增 `PATH_UNRESOLVED` 用于「检查后目录被移除 / 无权限」。
+- 非法 `Origin` 头不再可能影响请求处理（有回归测试覆盖）。
+- 刷新失败时状态栏不再谎报「已重新加载」；外部变更事件突发时合并为一次刷新，避免并发请求。
+
+### Tests
+
+- 新增 API 契约测试（真实 HTTP server + 真实 socket + JSON 解码）：`GET /api`、`/api/health`、项目与文件夹全流程、幂等、两个删除 endpoint 不存在时行为一致、错误结构统一、413、以及「不提供任何文件系统 endpoint」。
+- 新增并发测试（16 线程并发添加、并发幂等添加、混合读写下磁盘与内存一致）、写盘失败一致性测试、路径等价测试（大小写 / 分隔符 / 结尾 `\` / `.` / `..` / `\\?\` / UNC）、端口顺延与非法端口、CORS 非法 origin、未知路由、最强安全测试（删除引用后目录与目录内文件原封不动）。
+- 新增文档一致性测试：`docs/API.md` 必须列出每个真实 endpoint。
+- Rust 测试 92 → 119；前端测试 50 → 52。
 
 ## [1.1.0] - 2026-09-12
 

@@ -60,9 +60,10 @@ impl AddFolderOutcome {
     }
 }
 
-/// 路径比较用的规范形式：统一分隔符、去掉结尾分隔符、大小写归一（Windows 语义）。
+/// 路径比较用的规范形式：统一分隔符、去掉结尾分隔符、去掉 Windows 扩展长度前缀、
+/// 大小写归一（Windows 语义）。
 pub fn normalize_path_for_comparison(path: &str) -> String {
-    let trimmed = path.trim();
+    let trimmed = strip_verbatim_prefix(path.trim());
     let unified = trimmed.replace('/', "\\");
     let without_trailing = unified.trim_end_matches('\\');
     let kept = if without_trailing.is_empty() {
@@ -71,6 +72,21 @@ pub fn normalize_path_for_comparison(path: &str) -> String {
         without_trailing
     };
     kept.to_lowercase()
+}
+
+/// `\\?\C:\foo` → `C:\foo`，`\\?\UNC\server\share` → `\\server\share`。
+/// 扩展长度前缀只是长路径写法，不指向另一个目录，比较时必须视为同一路径。
+fn strip_verbatim_prefix(path: &str) -> String {
+    let rest = if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        // 还原成普通 UNC 写法（`\\` + `server\share...`）
+        return format!(r"\\{}", rest.trim_start_matches('\\'));
+    } else {
+        match path.strip_prefix(r"\\?\") {
+            Some(rest) => rest,
+            None => return path.to_string(),
+        }
+    };
+    rest.to_string()
 }
 
 pub fn find_folder_by_path<'a>(folders: &'a [Folder], path: &str) -> Option<&'a Folder> {
@@ -96,7 +112,8 @@ pub fn add_folder(folders: &mut Vec<Folder>, input: FolderInput) -> AppResult<Ad
     Ok(AddFolderOutcome::Created(folder))
 }
 
-/// 按 id 移除文件夹；返回被移除的条目。
+/// 按 id 移除「文件夹引用」（仅从列表中移除条目）。
+/// **不触碰文件系统**：这里没有也无法删除真实目录。
 pub fn remove_folder_by_id(folders: &mut Vec<Folder>, id: &str) -> AppResult<Folder> {
     let index = folders
         .iter()
@@ -105,7 +122,8 @@ pub fn remove_folder_by_id(folders: &mut Vec<Folder>, id: &str) -> AppResult<Fol
     Ok(folders.remove(index))
 }
 
-/// 按 path 移除文件夹；返回被移除的条目。
+/// 按 path 移除「文件夹引用」（仅从列表中移除条目）。
+/// **不触碰文件系统**：这里没有也无法删除真实目录。
 pub fn remove_folder_by_path(folders: &mut Vec<Folder>, path: &str) -> AppResult<Folder> {
     let target = normalize_path_for_comparison(path);
     let index = folders
@@ -141,6 +159,34 @@ mod tests {
             normalize_path_for_comparison("c:\\work\\src")
         );
         assert!(find_folder_by_path(&folders(), "c:/WORK/src/").is_some());
+    }
+
+    #[test]
+    fn compares_verbatim_and_plain_windows_paths_as_equal() {
+        // 扩展长度前缀只是长路径写法，指向同一个目录
+        assert_eq!(
+            normalize_path_for_comparison(r"\\?\C:\Work\Src"),
+            normalize_path_for_comparison(r"c:\work\src")
+        );
+        assert_eq!(
+            normalize_path_for_comparison(r"\\?\UNC\server\share\src"),
+            normalize_path_for_comparison(r"\\server\share\src")
+        );
+        assert_eq!(
+            normalize_path_for_comparison(r"\\?\C:\"),
+            normalize_path_for_comparison(r"C:\")
+        );
+    }
+
+    #[test]
+    fn strips_verbatim_prefix_for_both_drive_and_unc_forms() {
+        assert_eq!(strip_verbatim_prefix(r"\\?\C:\Work"), r"C:\Work");
+        assert_eq!(
+            strip_verbatim_prefix(r"\\?\UNC\server\share"),
+            r"\\server\share"
+        );
+        assert_eq!(strip_verbatim_prefix(r"C:\Work"), r"C:\Work");
+        assert_eq!(strip_verbatim_prefix(r"\\server\share"), r"\\server\share");
     }
 
     #[test]

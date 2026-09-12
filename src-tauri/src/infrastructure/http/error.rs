@@ -94,6 +94,11 @@ impl From<AppError> for ApiError {
             AppError::PathNotDirectory(path) => {
                 Self::bad_request("PATH_NOT_DIRECTORY", format!("path 存在但不是目录: {path}"))
             }
+            // 目录刚被删除 / 无权限等导致无法解析成真实路径：属于请求问题而不是服务崩溃
+            AppError::Io(message) => Self::bad_request(
+                "PATH_UNRESOLVED",
+                format!("path 无法解析为真实目录: {message}"),
+            ),
             AppError::ProjectNotFound(id) => {
                 Self::not_found("PROJECT_NOT_FOUND", format!("项目不存在: {id}"))
             }
@@ -158,6 +163,11 @@ mod tests {
                 AppError::InvalidArgument("bad".to_string()),
                 StatusCode::BAD_REQUEST,
                 "INVALID_ARGUMENT",
+            ),
+            (
+                AppError::Io("C:\\gone: 系统找不到指定的文件。".to_string()),
+                StatusCode::BAD_REQUEST,
+                "PATH_UNRESOLVED",
             ),
             (
                 AppError::ProjectNameTaken("A".to_string()),

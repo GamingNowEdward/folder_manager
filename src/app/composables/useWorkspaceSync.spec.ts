@@ -89,6 +89,62 @@ describe('useWorkspaceSync', () => {
     expect(unlistenMock).toHaveBeenCalledTimes(1)
   })
 
+  it('coalesces overlapping events instead of racing', async () => {
+    const projectStore = useProjectStore()
+    let resolveFirst: (() => void) | undefined
+    loadConfigMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            // 第一次刷新挂起，模拟慢请求
+            resolveFirst = () =>
+              resolve({
+                currentProjectId: 'p1',
+                projects: [{ id: 'p1', name: '第一版', folders: [] }]
+              })
+          })
+      )
+      .mockResolvedValue({
+        currentProjectId: 'p1',
+        projects: [{ id: 'p1', name: '最新版', folders: [] }]
+      })
+
+    await subscribeWorkspaceChanges()
+    for (const handler of handlers) handler({ revision: 1, source: 'workspace-changed' })
+    for (const handler of handlers) handler({ revision: 2, source: 'workspace-changed' })
+    for (const handler of handlers) handler({ revision: 3, source: 'workspace-changed' })
+
+    // 挂起期间只发出了一个请求（重入合并），不会并发打三个
+    expect(loadConfigMock).toHaveBeenCalledTimes(1)
+
+    resolveFirst?.()
+    for (let i = 0; i < 10; i += 1) await Promise.resolve()
+
+    // 事件突发结束后只额外补一次刷新，并且最终状态是最新的
+    expect(loadConfigMock).toHaveBeenCalledTimes(2)
+    expect(projectStore.currentProject?.name).toBe('最新版')
+  })
+
+  it('does not report a reload when the refresh fails', async () => {
+    const projectStore = useProjectStore()
+    loadConfigMock.mockResolvedValueOnce({
+      currentProjectId: 'p1',
+      projects: [{ id: 'p1', name: '已有状态', folders: [] }]
+    })
+    await projectStore.loadFromDisk()
+
+    loadConfigMock.mockRejectedValueOnce(new Error('config unreadable'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await subscribeWorkspaceChanges()
+    await emitWorkspaceChanged({ revision: 9, source: 'workspace-changed' })
+
+    // 刷新失败时 loadFromDisk 会清空状态并打日志，但状态栏不能谎报「已重新加载」
+    expect(useStatusStore().message).not.toContain('外部更新')
+    expect(consoleError).toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
   it('keeps the UI usable when the event subscription is unavailable', async () => {
     const eventModule = await import('@/infrastructure/tauri/event')
     vi.mocked(eventModule.onWorkspaceChanged).mockRejectedValueOnce(new Error('no tauri'))

@@ -271,4 +271,74 @@ mod tests {
             .get("access-control-allow-origin")
             .is_none());
     }
+
+    #[tokio::test]
+    async fn layer_does_not_panic_on_malformed_origin() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let app = axum::Router::new()
+            .route("/probe", axum::routing::get(|| async { "ok" }))
+            .layer(layer(&rules(&["http://localhost"])));
+
+        // 非法字节 / 空值 / 缺少 scheme / 带空格的 origin 都不能让服务崩溃
+        let malformed: [&[u8]; 4] = [b"\xff\xfe", b"", b"not-an-origin", b"http://local host"];
+        for value in malformed {
+            let request = Request::builder()
+                .method("GET")
+                .uri("/probe")
+                .header("origin", value)
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert!(
+                !response
+                    .headers()
+                    .contains_key("access-control-allow-origin"),
+                "非法 origin 不应该被允许: {value:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn wildcard_layer_allows_any_origin() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let app = axum::Router::new()
+            .route("/probe", axum::routing::get(|| async { "ok" }))
+            .layer(layer(&rules(&["*"])));
+        let request = Request::builder()
+            .method("GET")
+            .uri("/probe")
+            .header("origin", "http://evil.example.com")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(
+            response
+                .headers()
+                .get("access-control-allow-origin")
+                .map(|value| value.to_str().unwrap()),
+            Some("*")
+        );
+    }
+
+    #[test]
+    fn multiple_configured_origins_are_parsed_in_order() {
+        let origins = parse_origins(
+            "http://localhost:3000, http://127.0.0.1:5173 ,https://tool.internal",
+            default_origins(),
+        );
+
+        assert_eq!(origins.len(), 3);
+        assert_eq!(origins[0], "http://localhost:3000");
+        assert!(origin_allowed("http://localhost:3000", &origins));
+        assert!(origin_allowed("https://tool.internal", &origins));
+        assert!(!origin_allowed("http://localhost:9999", &origins));
+    }
 }

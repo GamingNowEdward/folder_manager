@@ -29,13 +29,19 @@ export const useProjectStore = defineStore('projects', () => {
     scheduleSave(snapshot())
   }
 
-  async function loadFromDisk(): Promise<void> {
+  /**
+   * 从磁盘重新加载权威快照。
+   * 返回是否加载成功 —— 调用方（外部变更同步）据此决定要不要提示「已重新加载」。
+   */
+  async function loadFromDisk(): Promise<boolean> {
     try {
       hydrate(await loadConfig())
+      return true
     } catch (error) {
       console.error('配置加载失败:', error)
       projects.value = []
       currentProjectId.value = ''
+      return false
     }
   }
 

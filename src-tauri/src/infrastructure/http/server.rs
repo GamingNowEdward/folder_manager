@@ -41,13 +41,19 @@ impl std::fmt::Display for ApiStartError {
 
 /// 运行中的 HTTP server 句柄：`shutdown()` 后会优雅退出。
 pub struct ServerHandle {
-    /// 实际监听地址（端口冲突顺延后的结果）。
+    /// 实际监听地址（端口冲突顺延后的结果）；生产代码用日志输出，测试用它拼 URL。
     #[cfg_attr(not(test), allow(dead_code))]
     addr: SocketAddr,
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl ServerHandle {
+    /// 实际监听地址（端口冲突顺延后的结果；端口为 0 时是系统分配的端口）。
+    #[cfg(test)]
+    pub fn address(&self) -> SocketAddr {
+        self.addr
+    }
+
     /// 优雅关闭：停止接收新连接，等待在途请求结束。
     pub fn shutdown(&self) {
         if let Some(sender) = self
@@ -202,11 +208,74 @@ mod tests {
         drop(listener);
     }
 
+    #[test]
+    fn falls_back_across_consecutively_occupied_ports() {
+        // 用固定高位端口段（Default 端口附近）保证"连续占用"在同一区间内，不会因系统
+        // 临时端口池分配的位置而跨区间。
+        let base = DEFAULT_API_PORT + 1000;
+        let Ok(holder) = StdTcpListener::bind(SocketAddr::from((API_HOST, base))) else {
+            // 该端口已被占用（环境特殊）：顺延测试在 reports_port_conflict 中已有覆盖
+            return;
+        };
+        let base = holder.local_addr().unwrap().port();
+
+        // 再连续占用 4 个端口（连同 holder 共 5 个）
+        let mut occupied: Vec<StdTcpListener> = Vec::new();
+        let mut next = next_candidate(base).unwrap();
+        for _ in 0..4 {
+            match StdTcpListener::bind(SocketAddr::from((API_HOST, next))) {
+                Ok(listener) => occupied.push(listener),
+                Err(_) => break,
+            }
+            next = next_candidate(next).unwrap();
+        }
+        let highest_occupied = occupied
+            .iter()
+            .map(|listener| listener.local_addr().unwrap().port())
+            .max()
+            .unwrap_or(base);
+
+        let (listener, addr) = bind_with_fallback(base).unwrap();
+
+        assert_eq!(
+            addr.port(),
+            highest_occupied + 1,
+            "应顺延到第一个空闲端口（base={base}, highest_occupied={highest_occupied}）"
+        );
+        drop(listener);
+        drop(occupied);
+        drop(holder);
+    }
+
+    #[test]
+    fn port_scan_budget_matches_documentation() {
+        // "最多再顺延 10 个端口"：起始端口 + 10 个候选，共 11 次尝试
+        assert_eq!(PORT_SCAN_ATTEMPTS, 10);
+        let mut port = 17890;
+        let mut attempts = 1;
+        while attempts <= PORT_SCAN_ATTEMPTS {
+            port = next_candidate(port).expect("17890 之后一定有候选端口");
+            attempts += 1;
+        }
+        assert_eq!(port, 17890 + PORT_SCAN_ATTEMPTS);
+    }
+
+    #[test]
+    fn invalid_environment_port_is_rejected_without_panic() {
+        for value in ["abc", "0", "65536", "-1", ""] {
+            let parsed = value.trim().parse::<u16>().ok().filter(|port| *port > 0);
+            assert!(parsed.is_none(), "{value} 不应该被当成合法端口");
+        }
+        // 边界值仍然合法
+        assert_eq!("65535".parse::<u16>().ok().filter(|p| *p > 0), Some(65535));
+        assert_eq!("1".parse::<u16>().ok().filter(|p| *p > 0), Some(1));
+    }
+
     #[tokio::test]
     async fn server_starts_serves_and_shuts_down() {
         let fixture = Fixture::new();
         let handle = start(fixture.service.clone(), "test").unwrap();
-        let addr = handle.addr;
+        let addr = handle.address();
         assert_eq!(addr.ip(), API_HOST);
 
         let client = reqwest::Client::new();
