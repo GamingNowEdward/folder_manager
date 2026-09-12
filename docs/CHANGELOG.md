@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-13
+
 ### Added
 
 - 本地 HTTP API（默认 `http://127.0.0.1:17890/api`，只绑定回环地址）：外部 AI Agent / Coding Agent / 自动化程序可以读取、创建、删除项目与文件夹。新增 `GET /api`（能力自描述）、`GET /api/health`、`GET /api/projects`、`POST /api/projects`、`GET|PUT|DELETE /api/projects/{id}`、`POST /api/projects/{id}/folders`、`DELETE /api/projects/{id}/folders/{folder_id}`、`DELETE /api/projects/{id}/folders?path=...`、`GET /api/folders?path=...`、`GET /api/folders/tree`；统一错误结构 `{ "error": { "code", "message" } }` 与 REST 状态码（200/201/400/404/409/500）。
