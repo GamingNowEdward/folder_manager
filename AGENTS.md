@@ -7,6 +7,7 @@
 - 持久化：Rust 端读写 `config.json`（release 构建保存在 exe 同目录，便于便携分发；debug 构建保存在系统应用数据目录）。
 - 配置格式：`version: 2`；旧版（无 `version`）自动迁移并补齐 id；覆盖旧格式前生成 `config.json.bak`；损坏文件隔离为 `config.json.corrupt-<时间戳>.bak`。
 - 窗口效果：Windows 上通过 DWM API 启用 Acrylic 亚克力背景（`src-tauri/src/infrastructure/windows/acrylic.rs`）。
+- 本地 HTTP API：随应用启动，只绑定 `127.0.0.1:17890`（`FOLDER_MANAGER_API_PORT` 可改端口），供外部 Agent 读写项目/文件夹；文档见 `docs/API.md`。
 
 ## 技术栈
 - **Tauri v2** 桌面应用：Rust 后端位于 `src-tauri/`，**Vue 3** + **Pinia** 前端位于 `src/`
@@ -23,9 +24,25 @@
 - `src/features/drag-drop/` — 拖拽：`useFolderDragDrop`、`useExternalDrop`、命中测试纯函数
 - `src/features/dialogs/` — 对话框编排：`useDialogs`、ConfirmDialog
 - `src/shared/` — 跨 feature 的常量、工具、status store
-- `src/infrastructure/tauri/` — Tauri IPC adapters（config / system / dialog / window）
+- `src/infrastructure/tauri/` — Tauri IPC adapters（config / system / dialog / window / event）
 - `src/types/index.ts` — 领域类型
-- `src-tauri/src/` — `commands/`（薄 IPC 层）、`application/`（编排）、`domain/`（模型与迁移规则）、`infrastructure/`（JSON 持久化、Windows 集成）、`error.rs`
+- `src-tauri/src/` — `commands/`（薄 IPC 层）、`application/`（编排）、`domain/`（模型与业务规则）、`infrastructure/`（JSON 持久化、Windows 集成、`paths` 路径规范化、`http` 本地 API）、`error.rs`
+
+### 业务逻辑共用（重要）
+项目 / 文件夹的增删改规则只有一份：
+
+```text
+Tauri command ──┐
+                ├─> application::config_service（唯一权威状态 + 落盘 + 广播变更）
+HTTP API ───────┘        └─> domain::{project,folder}（纯规则）
+```
+
+- 新增或修改业务规则时改 `domain`，不要在 command 与 HTTP handler 里各写一份。
+- HTTP API 不允许绕过 `ConfigService` 直接读写 `config.json`。
+- `ConfigService` 落盘成功后广播 `workspace-changed`（常量在 `application/config_service.rs`，
+  前端订阅在 `src/infrastructure/tauri/event.ts`，由 `src/app/bootstrap.ts` 触发 store reload），
+  这样 API 改动会立即反映到已打开的 UI，且不产生第二份长期状态。
+- API 只读写 Folder Manager 自己管理的配置，**绝不删除 / 创建真实文件夹**；`docs/API.md` 记录了完整安全边界。
 
 ## 环境要求
 接手开发需要以下环境（Windows 平台）：

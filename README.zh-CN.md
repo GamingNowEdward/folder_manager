@@ -14,6 +14,7 @@
 - **批量操作**：框选或 Ctrl+ 多选卡片，Delete 键批量删除
 - **便携持久化**：配置保存为 `config.json`（便携版在 exe 同目录），无需安装即可迁移
 - **配置安全升级**：带版本存储（`version: 2`），旧配置自动迁移；覆盖前生成 `config.json.bak`，无法解析的文件隔离保留而不丢失
+- **本地 HTTP API（面向 Agent）**：应用运行时在本机回环地址提供 REST API（`http://127.0.0.1:17890/api`），外部 AI Agent / 脚本可读取、创建、删除项目与文件夹，详见 [`docs/API.md`](./docs/API.md)
 
 ## 技术栈
 
@@ -99,11 +100,32 @@ cargo test --all-features
 │   ├── infrastructure/   # Tauri IPC adapters（config / system / dialog / window）
 │   └── types/            # 领域类型（Project / Folder / id）
 ├── src-tauri/            # Rust 后端（commands / application / domain / infrastructure）
+├── docs/API.md                    # 本地 HTTP API 文档（面向 AI Agent / 脚本）
 ├── docs/ARCHITECTURE_REFACTOR.md  # 架构决策与重构记录
 ├── docs/CHANGELOG.md              # 版本变更历史
 ├── pack-7z.ps1           # 源码打包脚本
 └── AGENTS.md             # AI 辅助开发约定
 ```
+
+## 本地 HTTP API
+
+应用启动时会在 `127.0.0.1:17890` 开启一个轻量 HTTP 服务（只绑定回环地址，不会监听 `0.0.0.0`），
+供 AI Agent 与自动化程序操作：
+
+```bash
+curl http://127.0.0.1:17890/api/health
+curl http://127.0.0.1:17890/api/projects
+curl -X POST http://127.0.0.1:17890/api/projects \
+  -H "Content-Type: application/json" -d "{\"name\":\"我的项目\"}"
+curl -X POST http://127.0.0.1:17890/api/projects/PROJECT_ID/folders \
+  -H "Content-Type: application/json" -d "{\"path\":\"C:\\\\work\\\\project\"}"
+curl -X DELETE http://127.0.0.1:17890/api/projects/PROJECT_ID/folders/FOLDER_ID
+```
+
+- 端口可用环境变量 `FOLDER_MANAGER_API_PORT` 修改；端口被占用时会自动顺延，即使 API 起不来也不影响主界面。
+- API 只修改 Folder Manager 自己的 `config.json`，**绝不会删除 Windows 里真实的文件夹**。
+- API 的修改会广播给界面，UI 自动刷新。
+- 完整文档：[`docs/API.md`](./docs/API.md)。
 
 ## 配置兼容性
 

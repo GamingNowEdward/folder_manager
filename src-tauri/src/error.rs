@@ -29,6 +29,28 @@ pub enum AppError {
     PathNotFound(String),
     #[error("打开文件夹失败: {0}")]
     OpenFolder(String),
+
+    // ---- 按操作粒度用例（本地 HTTP API / 共用业务逻辑）的领域错误 ----
+    #[error("请求参数错误: {0}")]
+    InvalidArgument(String),
+    #[error("路径不是目录: {0}")]
+    PathNotDirectory(String),
+    #[error("路径不是绝对路径: {0}")]
+    PathNotAbsolute(String),
+    #[error("项目不存在: {0}")]
+    ProjectNotFound(String),
+    #[error("文件夹不存在: {0}")]
+    FolderNotFound(String),
+    #[error("项目名称已存在: {0}")]
+    ProjectNameTaken(String),
+    #[error("文件夹名称已存在: {0}")]
+    FolderNameTaken(String),
+    #[error("项目名称不能为空")]
+    InvalidProjectName,
+    #[error("文件夹名称不能为空")]
+    InvalidFolderName,
+    #[error("文件系统操作失败: {0}")]
+    Io(String),
 }
 
 impl Serialize for AppError {

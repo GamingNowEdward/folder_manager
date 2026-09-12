@@ -14,6 +14,7 @@ A quick-access folder manager — organize your frequently used folders into "pr
 - **Batch operations**: Box-select or Ctrl+click to multi-select cards, then press Delete to remove them all
 - **Portable persistence**: Settings are stored in `config.json` (next to the exe in the portable build) — migrate without installing anything
 - **Safe config upgrades**: Versioned storage (`version: 2`) with stable IDs — legacy files migrate automatically, a `config.json.bak` backup is written before upgrading, and unreadable files are quarantined instead of silently discarded
+- **Local HTTP API for agents**: While the app runs, a loopback-only REST API (`http://127.0.0.1:17890/api`) lets external AI agents / scripts list, create and remove projects and folders — see [`docs/API.md`](./docs/API.md)
 
 ## Tech Stack
 
@@ -99,11 +100,33 @@ Produces `folder-manager-src.7z` (~200KB) with all build caches excluded — rea
 │   ├── infrastructure/   # Tauri IPC adapters (config / system / dialog / window)
 │   └── types/            # Domain types (Project / Folder / ids)
 ├── src-tauri/            # Rust backend (commands / application / domain / infrastructure)
+├── docs/API.md                    # Local HTTP API reference (for AI agents / scripts)
 ├── docs/ARCHITECTURE_REFACTOR.md  # Architecture decisions and refactor record
 ├── docs/CHANGELOG.md              # Version history
 ├── pack-7z.ps1           # Source packaging script
 └── AGENTS.md             # Conventions for AI-assisted development
 ```
+
+## Local HTTP API
+
+Folder Manager starts a lightweight HTTP server on `127.0.0.1:17890` (loopback only — never `0.0.0.0`)
+so AI agents and automation can drive it:
+
+```bash
+curl http://127.0.0.1:17890/api/health
+curl http://127.0.0.1:17890/api/projects
+curl -X POST http://127.0.0.1:17890/api/projects \
+  -H "Content-Type: application/json" -d "{\"name\":\"My Project\"}"
+curl -X POST http://127.0.0.1:17890/api/projects/PROJECT_ID/folders \
+  -H "Content-Type: application/json" -d "{\"path\":\"C:\\\\work\\\\project\"}"
+curl -X DELETE http://127.0.0.1:17890/api/projects/PROJECT_ID/folders/FOLDER_ID
+```
+
+- Override the port with `FOLDER_MANAGER_API_PORT`; if it is taken the app tries the next ports and
+  keeps working even if the API cannot start.
+- The API only edits Folder Manager's own `config.json` — **it never deletes real Windows folders**.
+- API changes are broadcast to the UI, which reloads automatically.
+- Full reference: [`docs/API.md`](./docs/API.md).
 
 ## Configuration compatibility
 

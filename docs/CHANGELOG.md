@@ -8,8 +8,21 @@
 
 ### Added
 
+- 本地 HTTP API（默认 `http://127.0.0.1:17890/api`，只绑定回环地址）：外部 AI Agent / Coding Agent / 自动化程序可以读取、创建、删除项目与文件夹。新增 `GET /api`（能力自描述）、`GET /api/health`、`GET /api/projects`、`POST /api/projects`、`GET|PUT|DELETE /api/projects/{id}`、`POST /api/projects/{id}/folders`、`DELETE /api/projects/{id}/folders/{folder_id}`、`DELETE /api/projects/{id}/folders?path=...`、`GET /api/folders?path=...`、`GET /api/folders/tree`；统一错误结构 `{ "error": { "code", "message" } }` 与 REST 状态码（200/201/400/404/409/500）。
+- API 与 Tauri command 共用同一套业务逻辑：项目/文件夹的增删改规则下沉到 `domain/{project,folder}.rs`，编排集中在 `application/config_service.rs`，`commands/` 与 `infrastructure/http/` 都只是薄适配层。API 不会绕过配置管理直接改 JSON。
+- API 修改配置后通过 Tauri event `workspace-changed` 通知前端，Pinia store 自动重新 hydrate，UI 不会停留在旧状态。
+- 环境变量配置：`FOLDER_MANAGER_API_PORT`（默认 17890，端口被占用时自动顺延最多 10 个端口，全部失败只记录日志、不影响 UI）、`FOLDER_MANAGER_API_CORS_ORIGINS`（默认只放开本机来源，支持 `*` 与显式 origin 列表）。
+- 路径安全处理：只接受绝对路径，`..` / `.` / 符号链接经 `canonicalize` 解析为真实绝对路径；相对路径与不存在/非目录路径返回 400。
+- 幂等添加：同一项目内相同 `path`（忽略大小写与结尾 `\`）不创建重复项，返回 `200 OK` 与已存在文件夹（新建返回 `201 Created`）。
+- `docs/API.md`：完整 API 文档（地址/端口、认证与安全模型、全部 endpoint、请求响应 JSON、状态码、错误格式、curl 示例、Agent 使用建议）。
+- Rust API 测试：健康检查、项目读写、文件夹增删、错误路径（项目/文件夹不存在、path 不存在/非目录/相对路径）、重复添加幂等、`DELETE` 不删除真实目录、修改后 config 持久化、非法 id、API server 启动与优雅关闭；全部使用临时目录与临时 config。
 - 本地一键发布脚本 `npm run release -- patch|minor|major`：自动执行质量门禁、同步版本文件（`package.json` / `Cargo.toml` / `Cargo.lock`）、提交、打 tag 并推送；CHANGELOG 仍由人工撰写并由脚本校验。
 - 发布脚本支持将 `[Unreleased]` 自动提升为 `## [x.y.z] - 日期`（并保留新的空 `[Unreleased]`），发布前无需手工修改版本标题。
+
+### Changed
+
+- `lib.rs` 改用 `build()` + `run(callback)`，在 `RunEvent::Exit` 时优雅关闭 HTTP server。
+- `ConfigService::initialize` 增加可选的变更事件出口（`ChangeSink`），application 层不直接依赖 Tauri。
 
 ## [1.1.0] - 2026-09-12
 

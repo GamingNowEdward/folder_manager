@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from '@/App.vue'
 import { useProjectStore } from '@/features/projects'
+import { subscribeWorkspaceChanges } from './composables/useWorkspaceSync'
 
 export function bootstrap(): void {
   const app = createApp(App)
@@ -10,4 +11,5 @@ export function bootstrap(): void {
   const projectStore = useProjectStore()
   app.mount('#app')
   void projectStore.loadFromDisk()
+  void subscribeWorkspaceChanges()
 }
