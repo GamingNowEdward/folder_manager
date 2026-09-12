@@ -4,6 +4,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+
+- 本地一键发布脚本 `npm run release -- patch|minor|major`：自动执行质量门禁、同步版本文件（`package.json` / `Cargo.toml` / `Cargo.lock`）、提交、打 tag 并推送；CHANGELOG 仍由人工撰写并由脚本校验。
+
 ## [1.1.0] - 2026-09-12
 
 架构重构：在不破坏现有用户体验与配置兼容性的前提下，将项目从 UI 驱动的功能堆叠重构为业务能力清晰、依赖方向明确、前后端边界稳定的桌面应用架构。
