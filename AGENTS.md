@@ -3,21 +3,29 @@
 ## 项目概述
 文件夹快速访问管理工具（Folder Manager）：按"项目"分组管理常用文件夹，支持双击打开、复制路径、拖拽排序、框选多选批量删除、从资源管理器拖入自动添加。
 
-- 数据模型：`Project → Folder { name, path }`，类型定义见 `src/types/index.ts`
-- 持久化：Rust 端读写 `config.json`（release 构建保存在 exe 同目录，便于便携分发；debug 构建保存在系统应用数据目录）
-- 窗口效果：Windows 上通过 DWM API 启用 Acrylic 亚克力背景（`src-tauri/src/lib.rs`）
+- 数据模型：`Project { id, name, folders }` → `Folder { id, name, path }`，stable id 为业务身份，UI index 仅用于渲染。
+- 持久化：Rust 端读写 `config.json`（release 构建保存在 exe 同目录，便于便携分发；debug 构建保存在系统应用数据目录）。
+- 配置格式：`version: 2`；旧版（无 `version`）自动迁移并补齐 id；覆盖旧格式前生成 `config.json.bak`；损坏文件隔离为 `config.json.corrupt-<时间戳>.bak`。
+- 窗口效果：Windows 上通过 DWM API 启用 Acrylic 亚克力背景（`src-tauri/src/infrastructure/windows/acrylic.rs`）。
 
 ## 技术栈
 - **Tauri v2** 桌面应用：Rust 后端位于 `src-tauri/`，**Vue 3** + **Pinia** 前端位于 `src/`
 - Vite 开发服务器固定端口 **1420**（设置 `TAURI_DEV_HOST` 时 HMR 使用 1421）。不要修改。
-- 入口：`src/main.ts` -> `src/App.vue`。状态仓库：`src/stores/app.ts`。类型：`src/types/index.ts`。
+- 入口：`src/main.ts` → `src/app/bootstrap.ts` → `src/App.vue` → `src/app/AppShell.vue`。
+- IPC：`load_config` / `save_config` / `open_folder`（快照式，前端提交全量 `WorkspaceData`）。
+- 架构分析与决策记录见 `docs/ARCHITECTURE_REFACTOR.md`；版本变更历史见 `docs/CHANGELOG.md`。
 
 ### 目录结构
-- `src/components/` — UI 组件：`TitleBar`、`Sidebar`（项目列表）、`FolderCard`（文件夹卡片）、`AddFolderCard`、`StatusBar`、`FlowLayout`
-- `src/dialogs/` — `ProjectDialog`、`FolderDialog`、`ConfirmDialog`
-- `src/App.vue` — 主交互逻辑：拖拽排序、框选、外部拖入、对话框编排
-- `src-tauri/src/lib.rs` — 全部 Rust 命令：`load_config`、`save_config`、`open_folder`
-- 根目录 `fix-*.cjs`、`gen.cjs`、`patch-*.cjs`、`rebuild-app.cjs` 是一次性脚本，不属于构建流程
+- `src/app/` — 组合根：`AppShell`、`bootstrap`、`TitleBar/StatusBar/DialogHost`、全局交互（`useGlobalInteractions`）
+- `src/features/projects/` — 项目领域：`project.model`、`project.store`、`useProjectActions`、Sidebar/ProjectDialog
+- `src/features/folders/` — 文件夹领域：`folder.model`、`folder.store`（当前项目文件夹操作层，状态归 project store）、`useFolderActions`、FolderCard/AddFolderCard/FolderDialog/FolderWorkspace
+- `src/features/selection/` — 选择：`useFolderSelection`、`useBoxSelection`
+- `src/features/drag-drop/` — 拖拽：`useFolderDragDrop`、`useExternalDrop`、命中测试纯函数
+- `src/features/dialogs/` — 对话框编排：`useDialogs`、ConfirmDialog
+- `src/shared/` — 跨 feature 的常量、工具、status store
+- `src/infrastructure/tauri/` — Tauri IPC adapters（config / system / dialog / window）
+- `src/types/index.ts` — 领域类型
+- `src-tauri/src/` — `commands/`（薄 IPC 层）、`application/`（编排）、`domain/`（模型与迁移规则）、`infrastructure/`（JSON 持久化、Windows 集成）、`error.rs`
 
 ## 环境要求
 接手开发需要以下环境（Windows 平台）：
@@ -33,19 +41,44 @@
 ## 命令
 - `npm run dev` — 仅启动 Vite 开发服务器（不会打开 Tauri 窗口）。
 - `npm run tauri dev` — 完整 Tauri 开发模式（Rust + Vite）。
-- `npm run build` — 先执行 `vue-tsc --noEmit`，再执行 `vite build`（类型检查 + 生产构建）。
+- `npm run typecheck` — `vue-tsc --noEmit`。
+- `npm run lint` — ESLint（flat config）全量检查。
+- `npm run test` — Vitest 单元测试（纯逻辑 + store）。
+- `npm run test:watch` — Vitest 监听模式。
+- `npm run format` / `npm run format:check` — Prettier。
+- `npm run build` — `typecheck` + `vite build`。
 - `npm run tauri build` — 完整原生构建。
+- `cargo fmt --all -- --check`、`cargo clippy --all-targets --all-features -- -D warnings`、`cargo test --all-features`（在 `src-tauri/` 下执行）。
 - `.\pack-7z.ps1` — 将源码打包为 `folder-manager-src.7z`（排除构建产物）。
-- 未配置测试或 lint 脚本；`vue-tsc --noEmit` 是唯一的验证命令。
+
+## 测试
+- 前端单测使用 Vitest（node 环境，不依赖 DOM），文件名 `*.spec.ts`，与对应 `model/` 或 `store/` 同目录。
+- 纯业务规则必须覆盖：selection、reorder、normalization、config mapping、project / folder mutations。
+- Rust 测试写在模块内 `#[cfg(test)]`；涉及文件系统的用例使用 `tempfile` 隔离。
+
+## 质量门禁
+提交 / PR 前需通过（与 `.github/workflows/ci.yml` 一致）：
+
+- 前端：`npm run typecheck`、`npm run lint`、`npm run test`、`npm run build`
+- Rust（`src-tauri/` 下）：`cargo fmt --all -- --check`、`cargo clippy --all-targets --all-features -- -D warnings`、`cargo test --all-features`
+
+## 版本与发布
+- 版本唯一来源：`package.json` 的 `version`；`tauri.conf.json` 通过 `"version": "../package.json"` 引用它。
+- 升级版本：更新 `docs/CHANGELOG.md` → `npm version x.y.z --no-git-tag-version`（自动同步 `Cargo.toml`；`Cargo.lock` 于下次 cargo 命令更新）→ `npm run version:check`。
+- 发布：推送 `vX.Y.Z` tag 触发 `.github/workflows/release.yml`，自动构建 MSI + 便携 exe 并创建 **draft** Release（说明自动截取自 `docs/CHANGELOG.md`），人工确认后发布。
+- tag 与 `package.json` 版本不一致时 release workflow 会直接失败。
 
 ## 风格 / 约定
 - `.vue` 文件使用 `<script setup lang="ts">` 风格（与现有文件保持一致）。
-- CSS 集中在 `src/assets/styles.css`；无 CSS modules 或预处理器。
-- 根目录下的 `fix-*.cjs`、`gen.cjs`、`patch-*.cjs` 是一次性 Node 脚本，不属于构建流程；不要把它们挂到 `package.json`。
+- 跨目录 import 使用 `@/` alias（配置见 `vite.config.ts` 与 `tsconfig.json`），同目录使用相对路径。
+- 叶子组件只通过 props / emit 交互；容器组件与 composable 负责调用 store 与 infrastructure。
+- 组件禁止直接 `invoke()`、读写文件或 import `@tauri-apps/*`；统一走 `src/infrastructure/tauri/`。
+- 业务规则放 `features/*/model`（纯函数，必须有单测）；状态编排放 feature store。
+- CSS 集中在 `src/assets/styles.css`；组件私有样式写在 `<style scoped>`。
 - `dist/`、`src-tauri/target/`、`src-tauri/gen/schemas/` 是构建产物；不要修改或提交。
 
 ## Tauri 注意事项
-- 前端通过 `@tauri-apps/api` 及插件（`dialog`、`clipboard-manager`）与 Rust 通信，使用 `invoke()` 调用——确保载荷可序列化。
+- 命令名与载荷保持兼容（快照式设计）；若变更载荷，需同步 `src/infrastructure/tauri/config.mapper.ts` 与 Rust `infrastructure/persistence/config_file.rs`。
 - Vite 会忽略 `src-tauri/**` 的 HMR；修改 Rust 代码需要重启 Tauri 进程。
 - release 与 debug 的配置存储位置不同（见"项目概述"），测试数据迁移时注意。
 

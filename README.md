@@ -13,6 +13,7 @@ A quick-access folder manager — organize your frequently used folders into "pr
 - **Drag to reorder**: Grab a card and drag it to a new position, with smooth FLIP animations
 - **Batch operations**: Box-select or Ctrl+click to multi-select cards, then press Delete to remove them all
 - **Portable persistence**: Settings are stored in `config.json` (next to the exe in the portable build) — migrate without installing anything
+- **Safe config upgrades**: Versioned storage (`version: 2`) with stable IDs — legacy files migrate automatically, a `config.json.bak` backup is written before upgrading, and unreadable files are quarantined instead of silently discarded
 
 ## Tech Stack
 
@@ -60,7 +61,25 @@ npm run tauri build
 Output:
 
 - `src-tauri\target\release\folder-manager.exe`
-- `src-tauri\target\release\bundle\msi\Folder Manager_1.0.0_x64_en-US.msi`
+- `src-tauri\target\release\bundle\msi\Folder Manager_1.1.0_x64_en-US.msi`
+
+### Checks
+
+```powershell
+npm run typecheck
+npm run lint
+npm run format:check
+npm run test
+npm run build
+```
+
+Rust (inside `src-tauri`):
+
+```powershell
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+```
 
 ### Packaging the source
 
@@ -74,11 +93,22 @@ Produces `folder-manager-src.7z` (~200KB) with all build caches excluded — rea
 
 ```
 ├── src/                  # Vue frontend
-│   ├── components/       # TitleBar / Sidebar / FolderCard / StatusBar, etc.
-│   ├── dialogs/          # Project / folder / confirm dialogs
-│   ├── stores/app.ts     # Pinia store + persistence
-│   └── types/            # Type definitions
-├── src-tauri/            # Rust backend (Tauri commands, config I/O, acrylic window)
+│   ├── app/              # Composition root: AppShell / bootstrap / dialog host
+│   ├── features/         # projects / folders / selection / drag-drop / dialogs
+│   ├── shared/           # constants, utils, status store
+│   ├── infrastructure/   # Tauri IPC adapters (config / system / dialog / window)
+│   └── types/            # Domain types (Project / Folder / ids)
+├── src-tauri/            # Rust backend (commands / application / domain / infrastructure)
+├── docs/ARCHITECTURE_REFACTOR.md  # Architecture decisions and refactor record
+├── docs/CHANGELOG.md              # Version history
 ├── pack-7z.ps1           # Source packaging script
 └── AGENTS.md             # Conventions for AI-assisted development
 ```
+
+## Configuration compatibility
+
+`config.json` uses versioned storage (`version: 2`) with stable IDs. Legacy files (no `version`)
+are migrated automatically; before a legacy file is overwritten a `config.json.bak` backup is
+created. Unreadable files are quarantined as `config.json.corrupt-<timestamp>.bak` instead of
+being silently discarded.
+

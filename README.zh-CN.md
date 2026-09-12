@@ -13,6 +13,7 @@
 - **拖拽排序**：按住卡片拖动即可调整顺序，带 FLIP 平滑动画
 - **批量操作**：框选或 Ctrl+ 多选卡片，Delete 键批量删除
 - **便携持久化**：配置保存为 `config.json`（便携版在 exe 同目录），无需安装即可迁移
+- **配置安全升级**：带版本存储（`version: 2`），旧配置自动迁移；覆盖前生成 `config.json.bak`，无法解析的文件隔离保留而不丢失
 
 ## 技术栈
 
@@ -60,7 +61,25 @@ npm run tauri build
 产物：
 
 - `src-tauri\target\release\folder-manager.exe`
-- `src-tauri\target\release\bundle\msi\Folder Manager_1.0.0_x64_en-US.msi`
+- `src-tauri\target\release\bundle\msi\Folder Manager_1.1.0_x64_en-US.msi`
+
+### 质量检查
+
+```powershell
+npm run typecheck
+npm run lint
+npm run format:check
+npm run test
+npm run build
+```
+
+Rust（在 `src-tauri` 目录下）：
+
+```powershell
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+```
 
 ### 打包源码
 
@@ -74,11 +93,21 @@ npm run tauri build
 
 ```
 ├── src/                  # Vue 前端
-│   ├── components/       # TitleBar / Sidebar / FolderCard / StatusBar 等
-│   ├── dialogs/          # 项目 / 文件夹 / 确认对话框
-│   ├── stores/app.ts     # Pinia 状态仓库 + 持久化
-│   └── types/            # 类型定义
-├── src-tauri/            # Rust 后端（Tauri 命令、配置读写、亚克力窗口）
+│   ├── app/              # 组合根：AppShell / bootstrap / 对话框宿主
+│   ├── features/         # projects / folders / selection / drag-drop / dialogs
+│   ├── shared/           # 常量、工具函数、状态栏 store
+│   ├── infrastructure/   # Tauri IPC adapters（config / system / dialog / window）
+│   └── types/            # 领域类型（Project / Folder / id）
+├── src-tauri/            # Rust 后端（commands / application / domain / infrastructure）
+├── docs/ARCHITECTURE_REFACTOR.md  # 架构决策与重构记录
+├── docs/CHANGELOG.md              # 版本变更历史
 ├── pack-7z.ps1           # 源码打包脚本
 └── AGENTS.md             # AI 辅助开发约定
 ```
+
+## 配置兼容性
+
+`config.json` 使用带版本的存储格式（`version: 2`）与 stable id。旧格式（无 `version`）会自动
+迁移；覆盖旧格式文件前会生成 `config.json.bak` 备份。无法解析的文件会隔离为
+`config.json.corrupt-<时间戳>.bak`，不会被静默丢弃。
+

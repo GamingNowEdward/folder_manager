@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicovrc/tauri-plugin-config-schema/refs/heads/main/schema.json",
   "productName": "Folder Manager",
-  "version": "1.0.0",
+  "version": "../package.json",
   "identifier": "com.folder-manager.app",
   "build": {
     "frontendDist": "../dist",
