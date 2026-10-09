@@ -23,6 +23,15 @@ Folder Manager 在启动时会同时在本机回环地址上开启一个轻量 R
 
 ### 修改端口
 
+优先用**界面**修改：侧边栏底部 →「⚙ 设置」→ 填入端口 → 保存。
+
+- 端口保存在 `settings.json`（与 `config.json` 同目录），**保存后需重启应用生效**。
+- 设置界面会显示当前实际监听地址；若端口由环境变量覆盖，会明确提示。
+- 该界面同时提供「📋 复制 Agent 接入文档」按钮：一键把本文档全文（附当前实际监听地址抬头）
+  复制到剪贴板，便于直接粘贴给 AI Agent。
+
+也可以用环境变量（适合脚本 / 临时覆盖）：
+
 ```powershell
 # PowerShell（临时）
 $env:FOLDER_MANAGER_API_PORT = "18000"
@@ -33,7 +42,9 @@ set FOLDER_MANAGER_API_PORT=18000
 folder-manager.exe
 ```
 
-- 环境变量：`FOLDER_MANAGER_API_PORT`（必须是 `1..=65535`）。
+**端口解析优先级**：`FOLDER_MANAGER_API_PORT` 环境变量 > `settings.json` 的 `api_port` > 默认 `17890`。
+
+- 环境变量必须是 `1..=65535`；取值非法时会被忽略并回落到设置 / 默认端口。
 - **端口冲突处理**：如果端口被占用，应用会自动尝试后续最多 10 个端口并打印实际监听地址；
   如果全部失败，只记录日志 —— **主界面照常使用，只是 API（含 `/api/health`）不可用**。
 - 实际监听地址会打印到应用日志：`[folder-manager-api] Folder Manager API 监听 http://127.0.0.1:17890/api`。

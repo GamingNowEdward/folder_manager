@@ -7,7 +7,9 @@
 - 持久化：Rust 端读写 `config.json`（release 构建保存在 exe 同目录，便于便携分发；debug 构建保存在系统应用数据目录）。
 - 配置格式：`version: 2`；旧版（无 `version`）自动迁移并补齐 id；覆盖旧格式前生成 `config.json.bak`；损坏文件隔离为 `config.json.corrupt-<时间戳>.bak`。
 - 窗口效果：Windows 上通过 DWM API 启用 Acrylic 亚克力背景（`src-tauri/src/infrastructure/windows/acrylic.rs`）。
-- 本地 HTTP API：随应用启动，只绑定 `127.0.0.1:17890`（`FOLDER_MANAGER_API_PORT` 可改端口），供外部 Agent 读写项目/文件夹；文档见 `docs/API.md`。
+- 本地 HTTP API：随应用启动，只绑定 `127.0.0.1:17890`，供外部 Agent 读写项目/文件夹；文档见 `docs/API.md`。
+  - 端口可在应用内「设置」（侧边栏底部）修改，持久化到 `settings.json`（与 `config.json` 同目录），保存后重启生效；解析优先级 `FOLDER_MANAGER_API_PORT` > `settings.json` > `17890`。
+  - 设置内「复制 Agent 接入文档」按钮可一键复制 `docs/API.md`（编译期经 `include_str!` 内嵌）给 Agent。
 
 ## 技术栈
 - **Tauri v2** 桌面应用：Rust 后端位于 `src-tauri/`，**Vue 3** + **Pinia** 前端位于 `src/`
@@ -103,5 +105,5 @@ HTTP API ───────┘        └─> domain::{project,folder}（纯�
 - release 与 debug 的配置存储位置不同（见"项目概述"），测试数据迁移时注意。
 
 ## 分发
-- 成品：`npm run tauri build` → `src-tauri\target\release\folder-manager.exe`（便携版，config.json 生成在 exe 旁）及 `src-tauri\target\release\bundle\msi\*.msi`（安装包）。
+- 成品：`npm run tauri build` → `src-tauri\target\release\folder-manager.exe`（便携版，config.json 生成在 exe 旁）及 `src-tauri\target\release\bundle\nsis\*-setup.exe`（NSIS 安装包，per-user 安装到 `%LOCALAPPDATA%\Folder Manager`，无需管理员；config.json 生成在安装目录旁）。
 - 源码：`.\pack-7z.ps1` → `folder-manager-src.7z`（约 1MB 以内），接收方按"环境要求"配置后 `npm install` → `npm run tauri dev` 即可运行。

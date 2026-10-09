@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- 设置界面（侧边栏底部「⚙ 设置」）：可修改本地 HTTP API 端口并持久化到 `settings.json`，保存后重启应用生效；界面显示当前实际监听地址，并提示「环境变量覆盖」与「已保存待重启」状态。
+- 设置内「📋 复制 Agent 接入文档」按钮：一键把 `docs/API.md` 全文（附当前实际监听地址抬头）复制到剪贴板，便于直接粘贴给 AI Agent。
+
+### Changed
+
+- HTTP API 端口解析优先级统一为 `FOLDER_MANAGER_API_PORT` 环境变量 > `settings.json` 的 `api_port` > 默认 `17890`；环境变量取值非法时改为记录日志并回落，不再阻止 API 启动。
+- `docs/API.md` 第 1 节补充设置界面、`settings.json`、端口优先级与「改端口需重启生效」说明。
+- Windows 安装包由 MSI 改为 **NSIS**（`installMode: "currentUser"`）：安装到 `%LOCALAPPDATA%\Folder Manager`，无需管理员权限，`config.json` / `settings.json` 与 exe 同目录且可写。此前 MSI 装到 `C:\Program Files`（per-machine），普通用户无法在安装目录写配置。
+
+### Fixed
+
+- 修复前端自身保存被误报为「外部更新」：切换项目 / 增删改等操作都会走 `save_config`，Rust 端落盘后广播 `workspace-changed`（`source: "snapshot"`），此前会被一律当作「外部修改」而弹出「配置已被外部更新，已重新加载」。现在前端只对来源为 HTTP API 的变更刷新并提示，自身保存不再弹提示。
+
 ## [1.2.0] - 2026-09-13
 
 ### Added

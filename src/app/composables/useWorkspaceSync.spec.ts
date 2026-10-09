@@ -80,6 +80,18 @@ describe('useWorkspaceSync', () => {
     expect(statusStore.message).toContain('12')
   })
 
+  it("ignores events triggered by the app's own snapshot save", async () => {
+    loadConfigMock.mockResolvedValue({ currentProjectId: '', projects: [] })
+    const statusStore = useStatusStore()
+
+    await subscribeWorkspaceChanges()
+    // 前端自身 save_config 落盘后广播的 source 为 "snapshot"：UI 已有该状态
+    await emitWorkspaceChanged({ revision: 5, source: 'snapshot' })
+
+    expect(loadConfigMock).not.toHaveBeenCalled()
+    expect(statusStore.message).not.toContain('外部更新')
+  })
+
   it('unsubscribes on stop', async () => {
     loadConfigMock.mockResolvedValue({ currentProjectId: '', projects: [] })
 

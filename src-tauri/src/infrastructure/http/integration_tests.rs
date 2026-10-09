@@ -25,7 +25,7 @@ impl LiveApi {
     fn start() -> Self {
         let fixture = Fixture::new();
         // 端口 0：由系统分配，避免与其它用例或用户环境冲突
-        let handle = server::start(fixture.service.clone(), env!("CARGO_PKG_VERSION"))
+        let handle = server::start(fixture.service.clone(), env!("CARGO_PKG_VERSION"), 0)
             .unwrap_or_else(|error| panic!("API 启动失败: {error}"));
         let addr: SocketAddr = handle.address();
         let base_url = format!("http://{addr}/api");
@@ -395,7 +395,7 @@ async fn concurrent_http_adds_do_not_lose_updates() {
 #[tokio::test]
 async fn real_server_releases_port_on_shutdown() {
     let fixture = Fixture::new();
-    let handle = server::start(fixture.service.clone(), "test").unwrap();
+    let handle = server::start(fixture.service.clone(), "test", 0).unwrap();
     let addr = handle.address();
 
     let client = reqwest::Client::builder().no_proxy().build().unwrap();

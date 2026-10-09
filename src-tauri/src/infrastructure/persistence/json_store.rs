@@ -11,20 +11,25 @@ use crate::infrastructure::persistence::config_file::{parse_config, ConfigFile};
 
 const CONFIG_FILE_NAME: &str = "config.json";
 
-pub fn resolve_config_path(app: &AppHandle) -> AppResult<PathBuf> {
+/// 配置目录：release 在 exe 同目录（便于便携分发），debug 在系统应用数据目录。
+pub(crate) fn resolve_config_dir(app: &AppHandle) -> AppResult<PathBuf> {
     if cfg!(not(debug_assertions)) {
         let exe_path =
             std::env::current_exe().map_err(|error| AppError::ExePath(error.to_string()))?;
         let dir = exe_path.parent().ok_or(AppError::ExeDir)?;
-        Ok(dir.join(CONFIG_FILE_NAME))
+        Ok(dir.to_path_buf())
     } else {
         let dir = app
             .path()
             .app_data_dir()
             .map_err(|error| AppError::AppDataDir(error.to_string()))?;
         fs::create_dir_all(&dir).map_err(|error| AppError::CreateConfigDir(error.to_string()))?;
-        Ok(dir.join(CONFIG_FILE_NAME))
+        Ok(dir)
     }
+}
+
+pub fn resolve_config_path(app: &AppHandle) -> AppResult<PathBuf> {
+    Ok(resolve_config_dir(app)?.join(CONFIG_FILE_NAME))
 }
 
 pub fn read_workspace(path: &Path) -> AppResult<Option<Workspace>> {
@@ -75,7 +80,7 @@ fn backup_legacy_file(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-fn write_atomically(path: &Path, contents: &str) -> AppResult<()> {
+pub(crate) fn write_atomically(path: &Path, contents: &str) -> AppResult<()> {
     let temp = path.with_extension("json.tmp");
     fs::write(&temp, contents).map_err(|error| AppError::WriteConfig(error.to_string()))?;
     fs::rename(&temp, path).map_err(|error| {

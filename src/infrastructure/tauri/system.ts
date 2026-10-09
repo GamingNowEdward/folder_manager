@@ -8,3 +8,7 @@ export async function openFolderInSystem(path: string): Promise<void> {
 export async function copyPath(path: string): Promise<void> {
   await writeText(path)
 }
+
+export async function copyText(text: string): Promise<void> {
+  await writeText(text)
+}

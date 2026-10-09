@@ -11,6 +11,7 @@ const emit = defineEmits<{
   add: []
   edit: []
   delete: []
+  settings: []
 }>()
 </script>
 
@@ -46,6 +47,9 @@ const emit = defineEmits<{
         @click="currentId && emit('delete')"
       >
         <span class="action-icon">✕</span>删除
+      </div>
+      <div class="sidebar-item" @click="emit('settings')">
+        <span class="action-icon">⚙</span>设置
       </div>
     </div>
   </div>

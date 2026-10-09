@@ -1,70 +1,70 @@
-**English** | [简体中文](./README.zh-CN.md)
-
 # Folder Manager
 
-A quick-access folder manager — organize your frequently used folders into "projects" and jump to them in one click. A Windows desktop app with an Acrylic translucent UI.
+文件夹快速访问管理工具 —— 按"项目"分组管理常用文件夹，一键直达。Windows 桌面应用，亚克力（Acrylic）半透明界面。
 
-## Features
+![Folder Manager 界面预览](./docs/pic/preview.jpg)
 
-- **Project groups**: Create separate projects for different workstreams or scenarios, each with its own set of folders
-- **Smooth project switching**: Cross-fade transition when switching between projects
-- **Quick access**: Double-click a card to open the folder in File Explorer; right-click or use the button to copy its path
-- **Multiple ways to add**: Add via dialog, browse to pick a directory, or drag folders straight in from File Explorer
-- **Drag to reorder**: Grab a card and drag it to a new position, with smooth FLIP animations
-- **Batch operations**: Box-select or Ctrl+click to multi-select cards, then press Delete to remove them all
-- **Portable persistence**: Settings are stored in `config.json` (next to the exe in the portable build) — migrate without installing anything
-- **Safe config upgrades**: Versioned storage (`version: 2`) with stable IDs — legacy files migrate automatically, a `config.json.bak` backup is written before upgrading, and unreadable files are quarantined instead of silently discarded
-- **Local HTTP API for agents**: While the app runs, a loopback-only REST API (`http://127.0.0.1:17890/api`) lets external AI agents / scripts list, create and remove projects and folders — see [`docs/API.md`](./docs/API.md)
+## 功能
 
-## Tech Stack
+- **项目分组**：为不同工作/场景建立独立的项目，各自维护一组文件夹
+- **项目切换动画**：切换项目时交叉淡入淡出过渡，平滑不闪跳
+- **快速访问**：双击卡片在资源管理器中打开文件夹，右键或点按钮复制路径
+- **多种添加方式**：对话框手动添加 / 浏览选择 / 直接从资源管理器拖入窗口自动添加
+- **拖拽排序**：按住卡片拖动即可调整顺序，带 FLIP 平滑动画
+- **批量操作**：框选或 Ctrl+ 多选卡片，Delete 键批量删除
+- **便携持久化**：配置保存为 `config.json`（便携版在 exe 同目录），无需安装即可迁移
+- **配置安全升级**：带版本存储（`version: 2`），旧配置自动迁移；覆盖前生成 `config.json.bak`，无法解析的文件隔离保留而不丢失
+- **本地 HTTP API（面向 Agent）**：应用运行时在本机回环地址提供 REST API（`http://127.0.0.1:17890/api`），外部 AI Agent / 脚本可读取、创建、删除项目与文件夹，详见 [`docs/API.md`](./docs/API.md)
 
-- [Tauri v2](https://tauri.app) (Rust backend) + [Vue 3](https://vuejs.org) + [Pinia](https://pinia.vuejs.org)
+## 技术栈
+
+- [Tauri v2](https://tauri.app)（Rust 后端）+ [Vue 3](https://vuejs.org) + [Pinia](https://pinia.vuejs.org)
 - Vite 6 + TypeScript
-- Windows DWM Acrylic backdrop
+- Windows DWM Acrylic 背景
 
-## Usage
+## 使用
 
-### Prebuilt binaries
+### 直接运行
 
-Download from Releases (or build your own):
+从 Release 下载（或自行构建后取用）：
 
-- `folder-manager.exe` — portable edition; just run it, and `config.json` is created next to the exe
-- `Folder Manager_x.x.x_x64_xx-XX.msi` — Windows installer
+- `folder-manager.exe` — 便携版，直接运行，`config.json` 自动生成在 exe 旁
+- `Folder Manager_x.x.x_x64-setup.exe` — Windows 安装包（当前用户安装，无需管理员）
 
-Runtime requirements: Windows 10 1803+ / Windows 11 (WebView2 is built in).
+运行环境：Windows 10 1803+ / Windows 11（WebView2 已内置）。
 
-## Building from source
+## 从源码构建
 
-### Prerequisites
+### 环境要求
 
-| Tool | Version | Notes |
+| 工具 | 版本 | 说明 |
 | --- | --- | --- |
-| Node.js | 18+ | Frontend build (required by Vite 6) |
-| Rust | stable | Install via [rustup](https://rustup.rs) |
-| VS Build Tools 2022 | — | Select the "Desktop development with C++" workload (MSVC v143 + Windows SDK); a hard requirement for compiling Rust on Windows |
-| WebView2 Runtime | — | Built into Win11 / up-to-date Win10 |
+| Node.js | 18+ | 前端构建（Vite 6 要求） |
+| Rust | stable | 通过 [rustup](https://rustup.rs) 安装 |
+| VS Build Tools 2022 | — | 勾选"使用 C++ 的桌面开发"工作负载（MSVC v143 + Windows SDK），Rust 在 Windows 编译的硬性依赖 |
+| WebView2 Runtime | — | Win11 / 更新过的 Win10 已内置 |
 
-> The first Rust build downloads and compiles all dependencies and takes several minutes; `src-tauri/target/` grows to about 7.5GB. This is normal (and git-ignored).
+> 首次 Rust 编译需下载并编译全部依赖，耗时数分钟；`src-tauri/target/` 会增至约 7.5GB，属正常现象（已 git 忽略）。
 
-### Development
+### 开发
 
 ```powershell
 npm install
 npm run tauri dev
 ```
 
-### Production build
+### 生产构建
 
 ```powershell
 npm run tauri build
 ```
 
-Output:
+产物：
 
 - `src-tauri\target\release\folder-manager.exe`
-- `src-tauri\target\release\bundle\msi\Folder Manager_1.1.0_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Folder Manager_x.x.x_x64-setup.exe`
 
-### Checks
+### 质量检查
 
 ```powershell
 npm run typecheck
@@ -74,7 +74,7 @@ npm run test
 npm run build
 ```
 
-Rust (inside `src-tauri`):
+Rust（在 `src-tauri` 目录下）：
 
 ```powershell
 cargo fmt --all -- --check
@@ -82,56 +82,54 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-### Packaging the source
+### 打包源码
 
 ```powershell
 .\pack-7z.ps1
 ```
 
-Produces `folder-manager-src.7z` (~200KB) with all build caches excluded — ready to share.
+生成 `folder-manager-src.7z`（约 200KB），已排除全部构建缓存，可直接发给他人。
 
-## Project structure
+## 项目结构
 
 ```
-├── src/                  # Vue frontend
-│   ├── app/              # Composition root: AppShell / bootstrap / dialog host
+├── src/                  # Vue 前端
+│   ├── app/              # 组合根：AppShell / bootstrap / 对话框宿主
 │   ├── features/         # projects / folders / selection / drag-drop / dialogs
-│   ├── shared/           # constants, utils, status store
-│   ├── infrastructure/   # Tauri IPC adapters (config / system / dialog / window)
-│   └── types/            # Domain types (Project / Folder / ids)
-├── src-tauri/            # Rust backend (commands / application / domain / infrastructure)
-├── docs/API.md                    # Local HTTP API reference (for AI agents / scripts)
-├── docs/ARCHITECTURE_REFACTOR.md  # Architecture decisions and refactor record
-├── docs/CHANGELOG.md              # Version history
-├── pack-7z.ps1           # Source packaging script
-└── AGENTS.md             # Conventions for AI-assisted development
+│   ├── shared/           # 常量、工具函数、状态栏 store
+│   ├── infrastructure/   # Tauri IPC adapters（config / system / dialog / window）
+│   └── types/            # 领域类型（Project / Folder / id）
+├── src-tauri/            # Rust 后端（commands / application / domain / infrastructure）
+├── docs/API.md                    # 本地 HTTP API 文档（面向 AI Agent / 脚本）
+├── docs/ARCHITECTURE_REFACTOR.md  # 架构决策与重构记录
+├── docs/CHANGELOG.md              # 版本变更历史
+├── pack-7z.ps1           # 源码打包脚本
+└── AGENTS.md             # AI 辅助开发约定
 ```
 
-## Local HTTP API
+## 本地 HTTP API
 
-Folder Manager starts a lightweight HTTP server on `127.0.0.1:17890` (loopback only — never `0.0.0.0`)
-so AI agents and automation can drive it:
+应用启动时会在 `127.0.0.1:17890` 开启一个轻量 HTTP 服务（只绑定回环地址，不会监听 `0.0.0.0`），
+供 AI Agent 与自动化程序操作：
 
 ```bash
 curl http://127.0.0.1:17890/api/health
 curl http://127.0.0.1:17890/api/projects
 curl -X POST http://127.0.0.1:17890/api/projects \
-  -H "Content-Type: application/json" -d "{\"name\":\"My Project\"}"
+  -H "Content-Type: application/json" -d "{\"name\":\"我的项目\"}"
 curl -X POST http://127.0.0.1:17890/api/projects/PROJECT_ID/folders \
   -H "Content-Type: application/json" -d "{\"path\":\"C:\\\\work\\\\project\"}"
 curl -X DELETE http://127.0.0.1:17890/api/projects/PROJECT_ID/folders/FOLDER_ID
 ```
 
-- Override the port with `FOLDER_MANAGER_API_PORT`; if it is taken the app tries the next ports and
-  keeps working even if the API cannot start.
-- The API only edits Folder Manager's own `config.json` — **it never deletes real Windows folders**.
-- API changes are broadcast to the UI, which reloads automatically.
-- Full reference: [`docs/API.md`](./docs/API.md).
+- 端口可用环境变量 `FOLDER_MANAGER_API_PORT` 修改；端口被占用时会自动顺延，即使 API 起不来也不影响主界面。
+- API 只修改 Folder Manager 自己的 `config.json`，**绝不会删除 Windows 里真实的文件夹**。
+- API 的修改会广播给界面，UI 自动刷新。
+- 完整文档：[`docs/API.md`](./docs/API.md)。
 
-## Configuration compatibility
+## 配置兼容性
 
-`config.json` uses versioned storage (`version: 2`) with stable IDs. Legacy files (no `version`)
-are migrated automatically; before a legacy file is overwritten a `config.json.bak` backup is
-created. Unreadable files are quarantined as `config.json.corrupt-<timestamp>.bak` instead of
-being silently discarded.
+`config.json` 使用带版本的存储格式（`version: 2`）与 stable id。旧格式（无 `version`）会自动
+迁移；覆盖旧格式文件前会生成 `config.json.bak` 备份。无法解析的文件会隔离为
+`config.json.corrupt-<时间戳>.bak`，不会被静默丢弃。
 

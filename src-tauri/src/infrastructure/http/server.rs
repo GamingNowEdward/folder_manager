@@ -20,17 +20,12 @@ pub const API_PORT_ENV: &str = "FOLDER_MANAGER_API_PORT";
 /// 启动失败的原因，用于日志与 UI 提示（UI 不会因此崩溃）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApiStartError {
-    InvalidPort(String),
     PortUnavailable(u16),
 }
 
 impl std::fmt::Display for ApiStartError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidPort(value) => write!(
-                formatter,
-                "{API_PORT_ENV} 不是合法的端口号: {value}（应为 1..=65535）"
-            ),
             Self::PortUnavailable(port) => write!(
                 formatter,
                 "{API_HOST}:{port} 及后续 {PORT_SCAN_ATTEMPTS} 个端口都被占用"
@@ -41,15 +36,13 @@ impl std::fmt::Display for ApiStartError {
 
 /// 运行中的 HTTP server 句柄：`shutdown()` 后会优雅退出。
 pub struct ServerHandle {
-    /// 实际监听地址（端口冲突顺延后的结果）；生产代码用日志输出，测试用它拼 URL。
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// 实际监听地址（端口冲突顺延后的结果）；日志、设置界面与测试都用它。
     addr: SocketAddr,
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl ServerHandle {
     /// 实际监听地址（端口冲突顺延后的结果；端口为 0 时是系统分配的端口）。
-    #[cfg(test)]
     pub fn address(&self) -> SocketAddr {
         self.addr
     }
@@ -74,25 +67,28 @@ impl Drop for ServerHandle {
     }
 }
 
-/// 解析要监听的端口：`FOLDER_MANAGER_API_PORT` 优先，默认 17890。
-pub fn resolve_port() -> Result<u16, ApiStartError> {
+/// 读取 `FOLDER_MANAGER_API_PORT`：未设置返回 `None`；
+/// 设置了但非法（非数字 / 0 / 超出 u16）时记录日志并返回 `None`。
+pub fn env_port() -> Option<u16> {
     match std::env::var(API_PORT_ENV) {
-        Ok(raw) if !raw.trim().is_empty() => raw
-            .trim()
-            .parse::<u16>()
-            .ok()
-            .filter(|port| *port > 0)
-            .ok_or(ApiStartError::InvalidPort(raw)),
-        _ => Ok(DEFAULT_API_PORT),
+        Ok(raw) if !raw.trim().is_empty() => {
+            let parsed = raw.trim().parse::<u16>().ok().filter(|port| *port > 0);
+            if parsed.is_none() {
+                eprintln!("[folder-manager-api] warn {API_PORT_ENV} 非法，忽略: {raw}");
+            }
+            parsed
+        }
+        _ => None,
     }
 }
 
-/// 在 127.0.0.1 上启动 API。失败只返回错误，不影响 Tauri 主 UI。
+/// 在 127.0.0.1 上启动 API。`port` 是期望端口，被占用时会自动向后顺延；
+/// 失败只返回错误，不影响 Tauri 主 UI。
 pub fn start(
     service: Arc<ConfigService>,
     version: &'static str,
+    port: u16,
 ) -> Result<ServerHandle, ApiStartError> {
-    let port = resolve_port()?;
     let (listener, addr) = bind_with_fallback(port)?;
     listener
         .set_nonblocking(true)
@@ -184,10 +180,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_port_prefers_env_and_validates() {
-        // 只读路径：未设置环境变量时返回默认值。
+    fn env_port_is_none_when_unset() {
+        // 只读路径：未设置环境变量时返回 None，由调用方回落到默认 / 设置端口。
         if std::env::var(API_PORT_ENV).is_err() {
-            assert_eq!(resolve_port().unwrap(), DEFAULT_API_PORT);
+            assert_eq!(env_port(), None);
         }
     }
 
@@ -274,7 +270,8 @@ mod tests {
     #[tokio::test]
     async fn server_starts_serves_and_shuts_down() {
         let fixture = Fixture::new();
-        let handle = start(fixture.service.clone(), "test").unwrap();
+        // 端口 0：由系统分配，避免与其它用例或用户环境冲突
+        let handle = start(fixture.service.clone(), "test", 0).unwrap();
         let addr = handle.address();
         assert_eq!(addr.ip(), API_HOST);
 

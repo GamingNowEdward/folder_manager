@@ -22,6 +22,10 @@ interface ConfirmDialogState {
   message: string
 }
 
+interface SettingsDialogState {
+  visible: boolean
+}
+
 const projectDialog = reactive<ProjectDialogState>({ visible: false, mode: 'add' })
 const folderDialog = reactive<FolderDialogState>({
   visible: false,
@@ -31,11 +35,16 @@ const folderDialog = reactive<FolderDialogState>({
   path: ''
 })
 const confirmDialog = reactive<ConfirmDialogState>({ visible: false, title: '', message: '' })
+const settingsDialog = reactive<SettingsDialogState>({ visible: false })
 let confirmAction: (() => void) | null = null
 
 export function useDialogs() {
   const isAnyDialogOpen = computed(
-    () => projectDialog.visible || folderDialog.visible || confirmDialog.visible
+    () =>
+      projectDialog.visible ||
+      folderDialog.visible ||
+      confirmDialog.visible ||
+      settingsDialog.visible
   )
 
   function openProjectDialog(mode: DialogMode): void {
@@ -62,6 +71,14 @@ export function useDialogs() {
     folderDialog.visible = false
   }
 
+  function openSettingsDialog(): void {
+    settingsDialog.visible = true
+  }
+
+  function closeSettingsDialog(): void {
+    settingsDialog.visible = false
+  }
+
   function openConfirm(title: string, message: string, onConfirm: () => void): void {
     confirmDialog.title = title
     confirmDialog.message = message
@@ -85,11 +102,14 @@ export function useDialogs() {
     projectDialog,
     folderDialog,
     confirmDialog,
+    settingsDialog,
     isAnyDialogOpen,
     openProjectDialog,
     closeProjectDialog,
     openFolderDialog,
     closeFolderDialog,
+    openSettingsDialog,
+    closeSettingsDialog,
     openConfirm,
     confirm,
     cancelConfirm

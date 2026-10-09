@@ -6,9 +6,11 @@ import FolderWorkspace from '@/features/folders/components/FolderWorkspace.vue'
 import TitleBar from './components/TitleBar.vue'
 import StatusBar from './components/StatusBar.vue'
 import DialogHost from './components/DialogHost.vue'
+import { useSettings } from './composables/useSettings'
 
 const projectStore = useProjectStore()
 const projectActions = useProjectActions()
+const settingsActions = useSettings()
 const { projects, currentProjectId } = storeToRefs(projectStore)
 </script>
 
@@ -23,6 +25,7 @@ const { projects, currentProjectId } = storeToRefs(projectStore)
         @add="projectActions.openAddDialog"
         @edit="projectActions.openEditDialog"
         @delete="projectActions.requestDelete"
+        @settings="settingsActions.open"
       />
       <FolderWorkspace />
     </div>

@@ -5,6 +5,12 @@ import { useStatusStore } from '@/shared/stores/status.store'
 /** 外部修改（本地 HTTP API）后刷新界面状态的提示文案。 */
 const STATUS_RELOADED = '↻ 配置已被外部更新，已重新加载'
 
+/**
+ * 前端自身 `save_config` 落盘后的广播来源（Rust `ConfigService::save` 用 `"snapshot"`）。
+ * 这种情况下 UI 已经持有最新状态，无需当作「外部更新」再刷新一次。
+ */
+const SNAPSHOT_SOURCE = 'snapshot'
+
 type ProjectStore = ReturnType<typeof useProjectStore>
 type StatusStore = ReturnType<typeof useStatusStore>
 
@@ -22,6 +28,8 @@ export async function subscribeWorkspaceChanges(): Promise<void> {
   const statusStore = useStatusStore()
   try {
     unlisten = await onWorkspaceChanged((payload: WorkspaceChangedPayload) => {
+      // 忽略前端自己触发的保存，只有外部（HTTP API）变更才重新拉取快照
+      if (payload.source === SNAPSHOT_SOURCE) return
       void reload(projectStore, statusStore, payload)
     })
   } catch (error) {
