@@ -10,7 +10,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  save: [port: string]
+  // 注意：`<input type="number">` 的 v-model 在编辑后给出 number，未编辑时是 string
+  save: [port: string | number]
   copy: []
   cancel: []
 }>()
@@ -20,7 +21,8 @@ const portInput = ref('')
 watch(
   () => props.settings,
   (current) => {
-    if (current) portInput.value = String(current.savedPort)
+    // 预填「期望端口」：保存过的用它，否则用默认端口（当前实际监听单独显示）
+    if (current) portInput.value = String(current.savedPort ?? current.defaultPort)
   },
   { immediate: true }
 )
@@ -40,7 +42,18 @@ watch(
           端口由环境变量 FOLDER_MANAGER_API_PORT 覆盖，移除该变量后界面设置才会生效。
         </div>
         <div v-else-if="settings?.restartRequired" class="settings-hint warn">
-          已保存端口 {{ settings?.savedPort }}，重启应用后生效。
+          已保存端口 {{ settings.savedPort }}，重启应用后生效。
+        </div>
+        <div
+          v-else-if="
+            settings &&
+            settings.startupPort !== null &&
+            settings.actualPort !== null &&
+            settings.startupPort !== settings.actualPort
+          "
+          class="settings-hint warn"
+        >
+          端口 {{ settings.startupPort }} 被占用，已自动顺延到 {{ settings.actualPort }}。
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import {
 } from '@/infrastructure/tauri/settings'
 import { copyText } from '@/infrastructure/tauri/system'
 import { useStatusStore } from '@/shared/stores/status.store'
+import { parsePort } from '@/shared/utils/port'
 
 // 模块级单例：设置弹窗状态与数据在 AppShell / DialogHost 之间共享（同 useDialogs 的写法）。
 const settings = ref<ApiSettings | null>(null)
@@ -41,10 +42,10 @@ export function useSettings() {
     dialogs.closeSettingsDialog()
   }
 
-  async function save(rawPort: string): Promise<void> {
-    const port = Number(rawPort.trim())
-    // 只做最基本的输入约束，业务规则以 Rust 端为准。
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  async function save(rawPort: string | number): Promise<void> {
+    // 输入框可能给出 number（type=number 的 v-model）或 string，统一解析。
+    const port = parsePort(rawPort)
+    if (port === null) {
       errorMessage.value = '端口必须是 1–65535 的整数'
       return
     }

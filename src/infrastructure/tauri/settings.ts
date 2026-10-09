@@ -1,8 +1,10 @@
 import { COMMANDS, invokeCommand } from './commands'
 
 export interface ApiSettings {
-  /** 已保存（下次启动将使用）的端口。 */
-  savedPort: number
+  /** 用户已保存的端口；从未保存过时为 null。 */
+  savedPort: number | null
+  /** 本进程启动时请求的端口；与实际监听不同即发生了自动顺延。API 未启动时为 null。 */
+  startupPort: number | null
   /** 当前实际监听端口；API 未启动时为 null。 */
   actualPort: number | null
   defaultPort: number

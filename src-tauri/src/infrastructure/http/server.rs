@@ -36,6 +36,8 @@ impl std::fmt::Display for ApiStartError {
 
 /// 运行中的 HTTP server 句柄：`shutdown()` 后会优雅退出。
 pub struct ServerHandle {
+    /// 启动时请求的端口（被占用时会与实际监听端口不同）。
+    requested_port: u16,
     /// 实际监听地址（端口冲突顺延后的结果）；日志、设置界面与测试都用它。
     addr: SocketAddr,
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
@@ -45,6 +47,11 @@ impl ServerHandle {
     /// 实际监听地址（端口冲突顺延后的结果；端口为 0 时是系统分配的端口）。
     pub fn address(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// 启动时请求的端口。与 [`Self::address`] 不同即说明发生了「端口被占用自动顺延」。
+    pub fn requested_port(&self) -> u16 {
+        self.requested_port
     }
 
     /// 优雅关闭：停止接收新连接，等待在途请求结束。
@@ -136,6 +143,7 @@ pub fn start(
     eprintln!("[folder-manager-api] {API_NAME} 监听 http://{addr}/api（CORS: {CORS_ORIGINS_ENV}）");
 
     Ok(ServerHandle {
+        requested_port: port,
         addr,
         shutdown: Mutex::new(Some(shutdown_tx)),
     })
