@@ -14,9 +14,7 @@
 
 ### Changed
 
-- 发布产物新增 MSI 安装包（`bundle.targets` 改为 `["nsis", "msi"]`）：同一个 draft release 同时提供 NSIS（per-user，无需管理员）、MSI（per-machine，适合企业批量部署）与便携版。
 - 便携版 zip 更名为 `FolderManager_<版本>_portable.zip`，解压后附带 `README.txt` 说明配置生成位置与放置建议。
-- Release workflow 增加 WiX Toolset 安装兜底，避免 MSI 打包因缺少工具链失败。
 
 ### Fixed
 

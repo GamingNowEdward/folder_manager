@@ -33,9 +33,6 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
-      - name: Install WiX Toolset
-        shell: pwsh
-        run: choco install wixtoolset --no-progress -y
       - name: Extract release notes from CHANGELOG
         shell: pwsh
         run: |
