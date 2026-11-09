@@ -105,5 +105,5 @@ HTTP API ───────┘        └─> domain::{project,folder}（纯�
 - release 与 debug 的配置存储位置不同（见"项目概述"），测试数据迁移时注意。
 
 ## 分发
-- 成品：`npm run tauri build` → `src-tauri\target\release\folder-manager.exe`（便携版，config.json 生成在 exe 旁）及 `src-tauri\target\release\bundle\nsis\*-setup.exe`（NSIS 安装包，per-user 安装到 `%LOCALAPPDATA%\Folder Manager`，无需管理员；config.json 生成在安装目录旁）。
+- 成品：`npm run tauri build` → `src-tauri\target\release\folder-manager.exe`（便携版，config.json 生成在 exe 旁）、`src-tauri\target\release\bundle\nsis\*-setup.exe`（NSIS 安装包，per-user 安装到 `%LOCALAPPDATA%\Folder Manager`，无需管理员）、`src-tauri\target\release\bundle\msi\*.msi`（MSI 安装包，per-machine，需要管理员，适合企业部署）；config.json 生成在安装目录旁。
 - 源码：`.\pack-7z.ps1` → `folder-manager-src.7z`（约 1MB 以内），接收方按"环境要求"配置后 `npm install` → `npm run tauri dev` 即可运行。

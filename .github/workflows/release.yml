@@ -33,6 +33,9 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: choco install wixtoolset --no-progress -y
       - name: Extract release notes from CHANGELOG
         shell: pwsh
         run: |
@@ -55,11 +58,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ github.ref_name }}" --notes-file release-notes.md
-      - name: Package portable exe
-        shell: pwsh
-        run: Compress-Archive -Path src-tauri/target/release/folder-manager.exe -DestinationPath folder-manager-portable.zip -Force
-      - name: Upload portable exe
+      - name: Package and upload portable zip
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" folder-manager-portable.zip --clobber
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $name = "FolderManager_${version}_portable"
+          New-Item -ItemType Directory -Path $name -Force | Out-Null
+          Copy-Item "src-tauri/target/release/folder-manager.exe" "$name/" -Force
+          $readme = @(
+            "Folder Manager $version (portable)",
+            "",
+            "直接运行 folder-manager.exe 即可，无需安装。",
+            "config.json 与 settings.json 会生成在 exe 同目录，便于便携使用。",
+            "请放在有写入权限的目录（不要放进 Program Files）。",
+            ""
+          ) -join "`r`n"
+          Set-Content -Path "$name/README.txt" -Value $readme -Encoding UTF8
+          Compress-Archive -Path "$name/*" -DestinationPath "$name.zip" -Force
+          gh release upload "${{ github.ref_name }}" "$name.zip" --clobber

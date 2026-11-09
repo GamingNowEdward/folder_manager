@@ -12,6 +12,12 @@
 - 文件夹区支持「卡片视图 / 列表视图」切换（状态栏右下角分段按钮）：列表视图展示名称与路径两列，双击打开、右键复制、拖拽排序与橡皮筋框选行为一致；视图偏好保存在 `localStorage`，重启后保持。
 - 对话框键盘支持：打开即聚焦默认按钮；`Enter` 确认、`Esc` 取消；删除确认框额外支持 `Y` 确定 / `N` 取消，按钮文案带快捷键提示；按钮新增 `:focus-visible` 焦点环，让「默认按钮」有可见反馈。
 
+### Changed
+
+- 发布产物新增 MSI 安装包（`bundle.targets` 改为 `["nsis", "msi"]`）：同一个 draft release 同时提供 NSIS（per-user，无需管理员）、MSI（per-machine，适合企业批量部署）与便携版。
+- 便携版 zip 更名为 `FolderManager_<版本>_portable.zip`，解压后附带 `README.txt` 说明配置生成位置与放置建议。
+- Release workflow 增加 WiX Toolset 安装兜底，避免 MSI 打包因缺少工具链失败。
+
 ### Fixed
 
 - 从资源管理器拖入时文件会被当成文件夹写入配置：新增 `filter_directories` 命令在 Rust 侧校验并规范化路径，只有真实目录才会进入配置；状态栏区分「文件」与「无法访问」并给出数量；连续拖入时只应用最后一次结果。
