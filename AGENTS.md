@@ -25,7 +25,7 @@
 - `src/features/selection/` — 选择：`useFolderSelection`、`useBoxSelection`
 - `src/features/drag-drop/` — 拖拽：`useFolderDragDrop`、`useExternalDrop`、命中测试纯函数
 - `src/features/dialogs/` — 对话框编排：`useDialogs`、ConfirmDialog
-- `src/shared/` — 跨 feature 的常量、工具、status store
+- `src/shared/` — 跨 feature 的常量、工具、UI 偏好（`preferences.store`：文件夹视图模式）与 status store
 - `src/infrastructure/tauri/` — Tauri IPC adapters（config / system / dialog / window / event）
 - `src/types/index.ts` — 领域类型
 - `src-tauri/src/` — `commands/`（薄 IPC 层）、`application/`（编排）、`domain/`（模型与业务规则）、`infrastructure/`（JSON 持久化、Windows 集成、`paths` 路径规范化、`http` 本地 API）、`error.rs`

@@ -3,7 +3,7 @@ const emit = defineEmits<{ click: [] }>()
 </script>
 
 <template>
-  <div class="add-card" @click="emit('click')">
+  <div class="add-card" data-add-folder @click="emit('click')">
     <div class="add-icon">＋</div>
     <div class="add-text">添加文件夹</div>
   </div>

@@ -45,7 +45,7 @@ export function useBoxSelection(options: BoxSelectionOptions) {
   function onAreaMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return
     const target = event.target as HTMLElement
-    if (target.closest('[data-folder-id]') || target.closest('.add-card')) return
+    if (target.closest('[data-folder-id], [data-add-folder]')) return
     event.preventDefault()
     options.onSelect([])
     isBoxSelecting.value = true

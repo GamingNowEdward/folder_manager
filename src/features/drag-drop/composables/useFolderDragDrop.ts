@@ -1,11 +1,18 @@
 import { computed, onMounted, onUnmounted, reactive, ref, type Ref } from 'vue'
 import type { Folder, FolderId } from '@/types'
+import type { FolderViewMode } from '@/shared/model/view-mode'
 import { DRAG_THRESHOLD_PX } from '@/shared/constants'
-import { resolveDropTargetIndex, type DropCard } from '../model/drop-target'
+import {
+  resolveDropTargetIndex,
+  resolveListDropTargetIndex,
+  type DropCard
+} from '../model/drop-target'
 
 interface DragDropOptions {
   areaRef: Ref<HTMLElement | null>
   folders: Ref<Folder[]>
+  /** 当前布局：列表视图用垂直命中，网格视图用左右半区命中。 */
+  layout: () => FolderViewMode
   onReorder: (id: FolderId, targetIndex: number) => void
   onSelect: (id: FolderId, additive: boolean) => void
   onDragFinished: () => void
@@ -79,12 +86,11 @@ export function useFolderDragDrop(options: DragDropOptions) {
     ghost.x = event.clientX - offsetX
     ghost.y = event.clientY - offsetY
 
-    const targetIndex = resolveDropTargetIndex(
-      collectDropCards(),
-      event.clientX,
-      event.clientY,
-      options.folders.value.length
-    )
+    const cards = collectDropCards()
+    const targetIndex =
+      options.layout() === 'list'
+        ? resolveListDropTargetIndex(cards, event.clientY, options.folders.value.length)
+        : resolveDropTargetIndex(cards, event.clientX, event.clientY, options.folders.value.length)
     if (targetIndex !== lastTargetIndex) {
       lastTargetIndex = targetIndex
       options.onReorder(dragId.value, targetIndex)

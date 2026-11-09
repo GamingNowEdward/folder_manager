@@ -158,6 +158,18 @@ body {
   padding: 4px 10px 8px 2px;
 }
 
+.folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 10px 8px 2px;
+}
+
+.folder-row.is-drag-source {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
 .empty-hint {
   display: flex;
   flex-direction: column;

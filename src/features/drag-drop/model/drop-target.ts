@@ -53,3 +53,24 @@ export function resolveDropTargetIndex(
 
   return fallbackIndex
 }
+
+/**
+ * 列表视图的插入位置：按行垂直中心判定。
+ * 指针在行上半 → 插到该行之前；下半 → 继续看下一行（即插到其后）。
+ * 网格视图的左右半区判定对整行宽度的列表不适用，因此单独实现。
+ */
+export function resolveListDropTargetIndex(
+  rows: DropCard[],
+  pointerY: number,
+  fallbackIndex: number
+): number {
+  if (rows.length === 0) return 0
+
+  const sorted = [...rows].sort((a, b) => a.top - b.top)
+  for (const row of sorted) {
+    const middle = (row.top + row.bottom) / 2
+    if (pointerY < middle) return row.index
+  }
+
+  return fallbackIndex
+}

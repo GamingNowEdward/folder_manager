@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Folder, FolderId } from '@/types'
+import FolderItemActions from './FolderItemActions.vue'
 
 const props = defineProps<{
   folder: Folder
@@ -37,14 +38,14 @@ function onMouseDown(event: MouseEvent): void {
         <div class="card-path">{{ folder.path }}</div>
       </div>
     </div>
-    <div class="card-actions">
-      <button class="action-btn" title="打开" @click="emit('open', folder.path)">▶</button>
-      <button class="action-btn" title="复制路径" @click="emit('copy', folder.path)">■</button>
-      <button class="action-btn" title="编辑" @click="emit('edit', folder.id)">✎</button>
-      <button class="action-btn action-danger" title="删除" @click="emit('delete', folder.id)">
-        ✕
-      </button>
-    </div>
+    <FolderItemActions
+      class="card-actions"
+      :folder="folder"
+      @open="emit('open', $event)"
+      @copy="emit('copy', $event)"
+      @edit="emit('edit', $event)"
+      @delete="emit('delete', $event)"
+    />
   </div>
 </template>
 
@@ -112,39 +113,11 @@ function onMouseDown(event: MouseEvent): void {
 }
 
 .card-actions {
-  display: flex;
-  gap: 4px;
   opacity: 0;
   transition: opacity 0.12s;
 }
 
 .folder-card:hover .card-actions {
   opacity: 1;
-}
-
-.action-btn {
-  width: 28px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.06);
-  border: none;
-  border-radius: 7px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.1s;
-  font-family: inherit;
-}
-
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.action-danger:hover {
-  background: rgba(255, 153, 164, 0.15);
-  color: #ff99a4;
 }
 </style>

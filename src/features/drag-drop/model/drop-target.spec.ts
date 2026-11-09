@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDropTargetIndex, type DropCard } from './drop-target'
+import { resolveDropTargetIndex, resolveListDropTargetIndex, type DropCard } from './drop-target'
 
 function card(
   id: string,
@@ -40,5 +40,38 @@ describe('resolveDropTargetIndex', () => {
   it('returns the original index of the card in the full array', () => {
     const cards = [card('a', 0, 0, 0), card('c', 2, 110, 0)]
     expect(resolveDropTargetIndex(cards, 120, 25, 3)).toBe(2)
+  })
+})
+
+describe('resolveListDropTargetIndex', () => {
+  // 列表行：全宽、逐行向下排列
+  function row(id: string, index: number, top: number): DropCard {
+    return { id, index, left: 0, top, right: 800, bottom: top + 38 }
+  }
+
+  it('returns 0 when no rows remain', () => {
+    expect(resolveListDropTargetIndex([], 100, 5)).toBe(0)
+  })
+
+  it('inserts before the row when the pointer is in its upper half', () => {
+    const rows = [row('a', 0, 0), row('b', 1, 40), row('c', 2, 80)]
+    expect(resolveListDropTargetIndex(rows, 10, 3)).toBe(0)
+    expect(resolveListDropTargetIndex(rows, 50, 3)).toBe(1)
+  })
+
+  it('inserts after the row when the pointer is in its lower half', () => {
+    const rows = [row('a', 0, 0), row('b', 1, 40)]
+    // 第一行的下半区 → 落到第二行之前，即 index 1
+    expect(resolveListDropTargetIndex(rows, 30, 3)).toBe(1)
+  })
+
+  it('falls back past the last row', () => {
+    const rows = [row('a', 0, 0), row('b', 1, 40)]
+    expect(resolveListDropTargetIndex(rows, 200, 3)).toBe(3)
+  })
+
+  it('uses visual order even when rows are passed out of order', () => {
+    const rows = [row('b', 1, 40), row('a', 0, 0)]
+    expect(resolveListDropTargetIndex(rows, 10, 2)).toBe(0)
   })
 })
