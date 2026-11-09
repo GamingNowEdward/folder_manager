@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useProjectStore } from '@/features/projects'
 import { useExternalDrop, useFolderDragDrop } from '@/features/drag-drop'
 import { useBoxSelection, useFolderSelection } from '@/features/selection'
-import { useDeleteShortcut, useFolderActions, useFolderStore } from '@/features/folders'
+import { useFolderActions, useFolderShortcuts, useFolderStore } from '@/features/folders'
 import { useStatusStore } from '@/shared/stores/status.store'
 import AddFolderCard from './AddFolderCard.vue'
 import FolderCard from './FolderCard.vue'
@@ -13,7 +13,7 @@ const projectStore = useProjectStore()
 const folderStore = useFolderStore()
 const folderActions = useFolderActions()
 const statusStore = useStatusStore()
-const { currentProject, currentFolders } = storeToRefs(projectStore)
+const { currentProject, currentFolders, currentProjectId } = storeToRefs(projectStore)
 
 const selection = useFolderSelection()
 const { isSelected } = selection
@@ -36,8 +36,15 @@ const { isDragging, dragId, ghost, draggedFolder, onCardMouseDown } = useFolderD
   onDragFinished: () => statusStore.setStatus('已重新排序')
 })
 
-useDeleteShortcut(selection)
+useFolderShortcuts({
+  selection,
+  // 拖拽 / 框选进行中不响应快捷键，避免把进行中的手势打断。
+  isBusy: () => isBoxSelecting.value || isDragging.value
+})
 useExternalDrop()
+
+// 选择集是当前项目的局部状态，切换项目后旧 id 已无意义，必须清空。
+watch(currentProjectId, () => selection.clear())
 </script>
 
 <template>

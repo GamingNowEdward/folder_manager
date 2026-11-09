@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useDialogKeys } from '@/features/dialogs'
 import { useDirectoryPicker } from '../composables/useDirectoryPicker'
 
 const props = defineProps<{
@@ -18,19 +19,6 @@ const path = ref(props.defaultPath ?? '')
 const nameInputRef = ref<HTMLInputElement | null>(null)
 const { pickDirectory } = useDirectoryPicker()
 
-onMounted(() => {
-  setTimeout(() => {
-    nameInputRef.value?.select()
-  }, 50)
-})
-
-async function onBrowse(): Promise<void> {
-  const selected = await pickDirectory()
-  if (selected) {
-    path.value = selected
-  }
-}
-
 function onSubmit(): void {
   const trimmedPath = path.value.trim()
   if (!trimmedPath) return
@@ -43,6 +31,24 @@ function onSubmit(): void {
         .pop() ?? ''
   }
   emit('confirm', { name: trimmedName, path: trimmedPath })
+}
+
+useDialogKeys({
+  onConfirm: onSubmit,
+  onCancel: () => emit('cancel'),
+  canConfirm: () => path.value.trim().length > 0
+})
+
+onMounted(() => {
+  nameInputRef.value?.focus()
+  nameInputRef.value?.select()
+})
+
+async function onBrowse(): Promise<void> {
+  const selected = await pickDirectory()
+  if (selected) {
+    path.value = selected
+  }
 }
 </script>
 
@@ -57,18 +63,12 @@ function onSubmit(): void {
           v-model="name"
           class="dialog-input"
           placeholder="留空则自动取路径末段"
-          @keydown.enter="onSubmit"
         />
       </div>
       <div class="dialog-field">
         <label class="dialog-label">路径</label>
         <div class="path-row">
-          <input
-            v-model="path"
-            class="dialog-input"
-            placeholder="选择或输入文件夹路径"
-            @keydown.enter="onSubmit"
-          />
+          <input v-model="path" class="dialog-input" placeholder="选择或输入文件夹路径" />
           <button class="btn-browse" @click="onBrowse">浏览...</button>
         </div>
       </div>

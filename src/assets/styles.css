@@ -1,4 +1,4 @@
-﻿* {
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -368,4 +368,13 @@ body {
 .folder-card.is-drag-source {
   opacity: 0;
   pointer-events: none;
+}
+
+/* 键盘焦点环：对话框默认按钮被聚焦时必须可见，否则「默认选中」没有视觉反馈 */
+.btn-ok:focus-visible,
+.btn-cancel:focus-visible,
+.btn-browse:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid rgba(96, 205, 255, 0.65);
+  outline-offset: 2px;
 }

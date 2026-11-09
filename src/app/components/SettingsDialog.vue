@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useDialogKeys } from '@/features/dialogs'
 import type { ApiSettings } from '@/infrastructure/tauri/settings'
 
 const props = defineProps<{
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const portInput = ref('')
+const portInputRef = ref<HTMLInputElement | null>(null)
 
 watch(
   () => props.settings,
@@ -26,6 +28,17 @@ watch(
   },
   { immediate: true }
 )
+
+useDialogKeys({
+  onConfirm: () => emit('save', portInput.value),
+  onCancel: () => emit('cancel'),
+  canConfirm: () => !props.loading && !props.saving
+})
+
+onMounted(() => {
+  portInputRef.value?.focus()
+  portInputRef.value?.select()
+})
 </script>
 
 <template>
@@ -61,13 +74,13 @@ watch(
         <label class="dialog-label">API 端口（1–65535）</label>
         <div class="port-row">
           <input
+            ref="portInputRef"
             v-model="portInput"
             class="dialog-input"
             type="number"
             min="1"
             max="65535"
             :disabled="loading || saving"
-            @keydown.enter="emit('save', portInput)"
           />
           <button class="btn-ok" :disabled="loading || saving" @click="emit('save', portInput)">
             保存
