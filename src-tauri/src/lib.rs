@@ -54,6 +54,7 @@ pub fn run() {
             commands::config::load_config,
             commands::config::save_config,
             commands::system::open_folder,
+            commands::system::filter_directories,
             commands::api_settings::get_api_settings,
             commands::api_settings::set_api_port,
             commands::api_settings::api_documentation

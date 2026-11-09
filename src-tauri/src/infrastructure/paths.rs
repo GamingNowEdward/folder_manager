@@ -139,7 +139,12 @@ mod tests {
         let nested = dir.path().join("nested");
         fs::create_dir(&nested).unwrap();
 
-        let resolved = resolve_existing_directory(&format!("{}\\", nested.display())).unwrap();
+        let resolved = resolve_existing_directory(&format!(
+            "{}{}",
+            nested.display(),
+            std::path::MAIN_SEPARATOR
+        ))
+        .unwrap();
 
         assert_eq!(
             resolved,
@@ -156,7 +161,12 @@ mod tests {
         let inner = dir.path().join("inner");
         fs::create_dir(&inner).unwrap();
 
-        let resolved = resolve_existing_directory(&format!("{}\\..", inner.display())).unwrap();
+        let resolved = resolve_existing_directory(&format!(
+            "{}{}..",
+            inner.display(),
+            std::path::MAIN_SEPARATOR
+        ))
+        .unwrap();
 
         assert_eq!(
             resolved,
