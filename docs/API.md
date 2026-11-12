@@ -89,8 +89,9 @@ curl -X DELETE \
 // Folder
 {
   "id": "df0f1a1e-...",        // 稳定 id（uuid），删除时使用
-  "name": "src",               // 显示名，默认取目录名
-  "path": "C:\\work\\project\\src"
+  "name": "src",               // 显示名（可为自定义备注），默认取目录名
+  "path": "C:\\work\\project\\src",
+  "created_at": 1762900000000  // 添加时间（Unix 毫秒），用于「添加日期」排序
 }
 
 // Project
@@ -103,6 +104,8 @@ curl -X DELETE \
 
 - `id` 稳定且唯一，Agent 应该缓存 `id` 而不是依赖列表顺序。
 - `path` 为规范化后的绝对路径（统一使用 `\` 分隔符）。
+- `created_at` 是**添加时间**（Unix 毫秒），编辑名称/路径不会改变它；旧版配置迁移时按原数组顺序补齐。
+- 文件夹排序（自定义 / 字母 / 添加日期、正反序）是**桌面客户端的显示偏好**，保存在本地 `localStorage`，不写进 `config.json`，也不影响 API 返回的数组顺序（数组顺序即自定义顺序）。
 - 保存位置：release 版在 exe 同目录的 `config.json`；debug 版在系统应用数据目录。
 
 ---
@@ -229,7 +232,12 @@ curl http://127.0.0.1:17890/api/projects
       "id": "1c2b3a4d-...",
       "name": "Project A",
       "folders": [
-        { "id": "df0f...", "name": "src", "path": "C:\\work\\project\\src" }
+        {
+          "id": "df0f...",
+          "name": "src",
+          "path": "C:\\work\\project\\src",
+          "created_at": 1762900000000
+        }
       ]
     }
   ]
@@ -338,7 +346,7 @@ curl -X POST http://127.0.0.1:17890/api/projects/9f8e.../folders \
 `201 Created`：
 
 ```json
-{ "id": "a1b2...", "name": "src", "path": "C:\\work\\project\\src" }
+{ "id": "a1b2...", "name": "src", "path": "C:\\work\\project\\src", "created_at": 1762900000000 }
 ```
 
 **幂等性（重要）**：如果该项目里已经存在同一个 `path`（忽略大小写、忽略结尾 `\`），

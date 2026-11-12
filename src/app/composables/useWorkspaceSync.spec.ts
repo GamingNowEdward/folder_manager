@@ -59,7 +59,11 @@ describe('useWorkspaceSync', () => {
       currentProjectId: 'p1',
       projects: [
         { id: 'p1', name: '初始', folders: [] },
-        { id: 'p2', name: 'Agent 新增', folders: [{ id: 'f1', name: 'src', path: 'C:\\src' }] }
+        {
+          id: 'p2',
+          name: 'Agent 新增',
+          folders: [{ id: 'f1', name: 'src', path: 'C:\\src', createdAt: 1 }]
+        }
       ]
     })
     await emitWorkspaceChanged({ revision: 7, source: 'workspace-changed' })

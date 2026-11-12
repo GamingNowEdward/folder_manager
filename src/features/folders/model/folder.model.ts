@@ -2,7 +2,7 @@ import type { Folder, FolderId } from '@/types'
 import { createId } from '@/shared/utils/id'
 
 export function createFolder(name: string, path: string): Folder {
-  return { id: createId(), name, path }
+  return { id: createId(), name, path, createdAt: Date.now() }
 }
 
 export function findFolderById(folders: Folder[], id: FolderId): Folder | null {

@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::domain::project::Project;
 
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Workspace {
@@ -56,6 +56,7 @@ mod tests {
                     id: String::new(),
                     name: "A".to_string(),
                     path: "C:\\A".to_string(),
+                    created_at: 0,
                 }],
             }],
         };

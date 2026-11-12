@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useProjectStore } from '@/features/projects'
 import { useExternalDrop, useFolderDragDrop } from '@/features/drag-drop'
 import { useBoxSelection, useFolderSelection } from '@/features/selection'
-import { useFolderActions, useFolderShortcuts, useFolderStore } from '@/features/folders'
+import {
+  sortFolders,
+  useFolderActions,
+  useFolderShortcuts,
+  useFolderStore
+} from '@/features/folders'
+import type { FolderSortField } from '@/shared/model/folder-sort'
 import { usePreferencesStore } from '@/shared/stores/preferences.store'
 import { useStatusStore } from '@/shared/stores/status.store'
 import AddFolderCard from './AddFolderCard.vue'
 import AddFolderRow from './AddFolderRow.vue'
 import FolderCard from './FolderCard.vue'
 import FolderListItem from './FolderListItem.vue'
+import FolderSortMenu from './FolderSortMenu.vue'
 
 const projectStore = useProjectStore()
 const folderStore = useFolderStore()
@@ -18,12 +25,16 @@ const folderActions = useFolderActions()
 const statusStore = useStatusStore()
 const preferences = usePreferencesStore()
 const { currentProject, currentFolders, currentProjectId } = storeToRefs(projectStore)
-const { viewMode } = storeToRefs(preferences)
+const { viewMode, folderSort } = storeToRefs(preferences)
+
+/** 显示顺序：由「自定义 / 字母 / 添加日期」排序规则决定，不写回底层数组。 */
+const displayFolders = computed(() => sortFolders(currentFolders.value, folderSort.value))
 
 const selection = useFolderSelection()
 const { isSelected } = selection
 
 const cardsAreaRef = ref<HTMLElement | null>(null)
+const sortMenu = reactive({ visible: false, x: 0, y: 0 })
 
 const { isBoxSelecting, boxRect, boxOverlayStyle, onAreaMouseDown } = useBoxSelection({
   areaRef: cardsAreaRef,
@@ -32,8 +43,9 @@ const { isBoxSelecting, boxRect, boxOverlayStyle, onAreaMouseDown } = useBoxSele
 
 const { isDragging, dragId, ghost, draggedFolder, onCardMouseDown } = useFolderDragDrop({
   areaRef: cardsAreaRef,
-  folders: currentFolders,
+  folders: displayFolders,
   layout: () => viewMode.value,
+  canReorder: () => folderSort.value.field === 'custom',
   onReorder: (id, targetIndex) => folderStore.reorderFolder(id, targetIndex),
   onSelect: (id, additive) => {
     if (additive) selection.toggle(id)
@@ -44,13 +56,51 @@ const { isDragging, dragId, ghost, draggedFolder, onCardMouseDown } = useFolderD
 
 useFolderShortcuts({
   selection,
-  // 拖拽 / 框选进行中不响应快捷键，避免把进行中的手势打断。
-  isBusy: () => isBoxSelecting.value || isDragging.value
+  folders: displayFolders,
+  areaRef: cardsAreaRef,
+  // 拖拽 / 框选进行中或排序菜单打开时不响应快捷键，避免把进行中的手势打断。
+  isBusy: () => isBoxSelecting.value || isDragging.value || sortMenu.visible
 })
 useExternalDrop()
 
+function closeSortMenu(): void {
+  sortMenu.visible = false
+}
+
+/**
+ * 排序菜单只在「卡片之间的空白处」右键弹出。
+ * 卡片本身的右键仍然是复制路径（FolderCard / FolderListItem 已有处理），
+ * 「添加文件夹」占位块也不参与。
+ */
+function openSortMenu(event: MouseEvent): void {
+  if (!currentProject.value) return
+  const target = event.target as HTMLElement
+  if (target.closest('[data-folder-id], [data-add-folder]')) return
+  event.preventDefault()
+  sortMenu.x = event.clientX
+  sortMenu.y = event.clientY
+  sortMenu.visible = true
+}
+
+function selectSortField(field: FolderSortField): void {
+  preferences.setSortField(field)
+  closeSortMenu()
+}
+
+function toggleSortDirection(): void {
+  preferences.toggleSortDirection()
+  closeSortMenu()
+}
+
+function onCardsAreaScroll(): void {
+  if (sortMenu.visible) closeSortMenu()
+}
+
 // 选择集是当前项目的局部状态，切换项目后旧 id 已无意义，必须清空。
-watch(currentProjectId, () => selection.clear())
+watch(currentProjectId, () => {
+  selection.clear()
+  closeSortMenu()
+})
 </script>
 
 <template>
@@ -61,7 +111,13 @@ watch(currentProjectId, () => selection.clear())
         <button class="btn btn-accent" @click="folderActions.openAddDialog()">＋ 添加文件夹</button>
       </div>
     </div>
-    <div ref="cardsAreaRef" class="cards-area" @mousedown="onAreaMouseDown">
+    <div
+      ref="cardsAreaRef"
+      class="cards-area"
+      @mousedown="onAreaMouseDown"
+      @contextmenu="openSortMenu"
+      @scroll.passive="onCardsAreaScroll"
+    >
       <div v-if="isBoxSelecting && boxRect" class="box-select-overlay" :style="boxOverlayStyle" />
       <Transition name="project-swap" mode="out-in">
         <div
@@ -71,7 +127,7 @@ watch(currentProjectId, () => selection.clear())
         >
           <TransitionGroup v-if="viewMode === 'grid'" name="flip-list">
             <FolderCard
-              v-for="folder in currentFolders"
+              v-for="folder in displayFolders"
               :key="folder.id"
               :class="{ 'is-drag-source': isDragging && folder.id === dragId }"
               :folder="folder"
@@ -85,7 +141,7 @@ watch(currentProjectId, () => selection.clear())
           </TransitionGroup>
           <TransitionGroup v-else name="flip-list">
             <FolderListItem
-              v-for="folder in currentFolders"
+              v-for="folder in displayFolders"
               :key="folder.id"
               :class="{ 'is-drag-source': isDragging && folder.id === dragId }"
               :folder="folder"
@@ -134,6 +190,16 @@ watch(currentProjectId, () => selection.clear())
         <div class="empty-text">选择或新建一个项目开始</div>
       </div>
     </div>
+
+    <FolderSortMenu
+      v-if="sortMenu.visible"
+      :x="sortMenu.x"
+      :y="sortMenu.y"
+      :sort="folderSort"
+      @select-field="selectSortField"
+      @toggle-direction="toggleSortDirection"
+      @close="closeSortMenu"
+    />
   </div>
 </template>
 

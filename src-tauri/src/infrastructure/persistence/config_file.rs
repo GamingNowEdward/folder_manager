@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::domain::config::{Workspace, CONFIG_VERSION};
-use crate::domain::folder::Folder;
+use crate::domain::folder::{now_ms, Folder};
 use crate::domain::project::Project;
 use crate::error::{AppError, AppResult};
 
@@ -38,6 +38,9 @@ pub struct FolderFile {
     pub name: String,
     #[serde(default)]
     pub path: String,
+    /// 添加时间（Unix 毫秒）。v2 及更早没有这个字段，迁移时按数组顺序补齐。
+    #[serde(default)]
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +87,7 @@ impl ConfigFile {
                             id: folder.id,
                             name: folder.name,
                             path: folder.path,
+                            created_at: folder.created_at,
                         })
                         .collect(),
                 })
@@ -103,6 +107,7 @@ fn project_to_file(project: &Project) -> ProjectFile {
                 id: folder.id.clone(),
                 name: folder.name.clone(),
                 path: folder.path.clone(),
+                created_at: folder.created_at,
             })
             .collect(),
     }
@@ -114,16 +119,37 @@ pub fn parse_config(value: Value) -> AppResult<Workspace> {
         None | Some(1) => {
             let legacy: LegacyConfig = serde_json::from_value(value)
                 .map_err(|error| AppError::ParseConfig(error.to_string()))?;
-            Ok(migrate_legacy(legacy))
+            let mut workspace = migrate_legacy(legacy);
+            backfill_created_at(&mut workspace, now_ms());
+            Ok(workspace)
         }
-        Some(found) if found == CONFIG_VERSION as u64 => {
+        // v2 没有 created_at、v3 可能有缺失项：补齐后再进入业务层。
+        Some(found) if found == 2 || found == CONFIG_VERSION as u64 => {
             let file: ConfigFile = serde_json::from_value(value)
                 .map_err(|error| AppError::ParseConfig(error.to_string()))?;
             let mut workspace = file.into_workspace();
             workspace.normalize();
+            backfill_created_at(&mut workspace, now_ms());
             Ok(workspace)
         }
         Some(found) => Err(AppError::UnsupportedVersion(found)),
+    }
+}
+
+/// 为缺少添加时间的文件夹补时间戳。
+///
+/// 只要一个项目里出现 `created_at <= 0`（v2 迁移或手工改配置），就**按数组顺序重建整个项目**：
+/// 第一个最早、最后一个最新，保证迁移后「按添加日期」的结果与用户原本看到的顺序一致。
+/// 时间值本身不参与「自定义顺序」，所以重建不会改变界面顺序。
+fn backfill_created_at(workspace: &mut Workspace, base_ms: i64) {
+    for project in &mut workspace.projects {
+        if !project.folders.iter().any(|folder| folder.created_at <= 0) {
+            continue;
+        }
+        let len = project.folders.len() as i64;
+        for (index, folder) in project.folders.iter_mut().enumerate() {
+            folder.created_at = base_ms - (len - 1 - index as i64);
+        }
     }
 }
 
@@ -134,7 +160,13 @@ fn migrate_legacy(legacy: LegacyConfig) -> Workspace {
         migrated.folders = project
             .folders
             .into_iter()
-            .map(|folder| Folder::new(folder.name, folder.path))
+            // created_at 留 0，交给 `backfill_created_at` 按数组顺序统一补齐
+            .map(|folder| Folder {
+                id: String::new(),
+                name: folder.name,
+                path: folder.path,
+                created_at: 0,
+            })
             .collect();
         workspace.projects.push(migrated);
     }
@@ -183,6 +215,83 @@ mod tests {
         let workspace = parse_config(value).unwrap();
 
         assert_eq!(workspace.current_project_id, workspace.projects[0].id);
+    }
+
+    #[test]
+    fn backfills_created_at_in_array_order_when_migrating_v2() {
+        let value = json!({
+            "version": 2,
+            "current_project": "p1",
+            "projects": [{
+                "id": "p1",
+                "name": "工作",
+                "folders": [
+                    { "id": "f1", "name": "B", "path": "C:\\B" },
+                    { "id": "f2", "name": "A", "path": "C:\\A" },
+                    { "id": "f3", "name": "C", "path": "C:\\C" }
+                ]
+            }]
+        });
+
+        let workspace = parse_config(value).unwrap();
+        let times: Vec<i64> = workspace.projects[0]
+            .folders
+            .iter()
+            .map(|folder| folder.created_at)
+            .collect();
+
+        assert!(times.iter().all(|time| *time > 0), "迁移后必须有添加时间");
+        assert!(
+            times[0] < times[1] && times[1] < times[2],
+            "数组顺序必须与添加时间一致: {times:?}"
+        );
+    }
+
+    #[test]
+    fn keeps_existing_created_at_for_v3() {
+        let value = json!({
+            "version": 3,
+            "current_project": "p1",
+            "projects": [{
+                "id": "p1",
+                "name": "工作",
+                "folders": [
+                    { "id": "f1", "name": "B", "path": "C:\\B", "created_at": 111 },
+                    { "id": "f2", "name": "A", "path": "C:\\A", "created_at": 222 }
+                ]
+            }]
+        });
+
+        let workspace = parse_config(value).unwrap();
+
+        assert_eq!(workspace.projects[0].folders[0].created_at, 111);
+        assert_eq!(workspace.projects[0].folders[1].created_at, 222);
+    }
+
+    #[test]
+    fn backfills_missing_created_at_in_v3_without_losing_order() {
+        let value = json!({
+            "version": 3,
+            "current_project": "p1",
+            "projects": [{
+                "id": "p1",
+                "name": "工作",
+                "folders": [
+                    { "id": "f1", "name": "B", "path": "C:\\B" },
+                    { "id": "f2", "name": "A", "path": "C:\\A", "created_at": 222 }
+                ]
+            }]
+        });
+
+        let workspace = parse_config(value).unwrap();
+        let times: Vec<i64> = workspace.projects[0]
+            .folders
+            .iter()
+            .map(|folder| folder.created_at)
+            .collect();
+
+        assert!(times.iter().all(|time| *time > 0));
+        assert!(times[0] < times[1], "缺失时间后仍要保留数组顺序");
     }
 
     #[test]

@@ -73,7 +73,7 @@ describe('project.store', () => {
       currentProjectId: 'p1',
       projects: [{ id: 'p1', name: 'A', folders: [] }]
     })
-    store.replaceCurrentFolders([{ id: 'f1', name: 'X', path: 'C:\\X' }])
+    store.replaceCurrentFolders([{ id: 'f1', name: 'X', path: 'C:\\X', createdAt: 1 }])
     expect(store.currentFolders.map((folder) => folder.name)).toEqual(['X'])
   })
 })

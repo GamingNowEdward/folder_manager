@@ -13,6 +13,8 @@ interface DragDropOptions {
   folders: Ref<Folder[]>
   /** 当前布局：列表视图用垂直命中，网格视图用左右半区命中。 */
   layout: () => FolderViewMode
+  /** 是否允许拖拽改变顺序；自动排序（字母/添加日期）下为 false。 */
+  canReorder: () => boolean
   onReorder: (id: FolderId, targetIndex: number) => void
   onSelect: (id: FolderId, additive: boolean) => void
   onDragFinished: () => void
@@ -64,6 +66,8 @@ export function useFolderDragDrop(options: DragDropOptions) {
 
   function onMouseMove(event: MouseEvent): void {
     if (!dragId.value) return
+    // 自动排序下顺序由排序规则决定：拖拽只当作一次普通点击，不进入排序状态。
+    if (!options.canReorder()) return
     const dx = Math.abs(event.clientX - startX)
     const dy = Math.abs(event.clientY - startY)
     if (dx <= DRAG_THRESHOLD_PX && dy <= DRAG_THRESHOLD_PX) return

@@ -6,6 +6,7 @@ export interface FolderDto {
   id?: string | null
   name?: string | null
   path?: string | null
+  created_at?: number | null
 }
 
 export interface ProjectDto {
@@ -28,7 +29,12 @@ export function toWorkspace(dto: ConfigDto | null | undefined): WorkspaceData {
     folders: (Array.isArray(rawProject?.folders) ? rawProject.folders : []).map((rawFolder) => ({
       id: rawFolder?.id || createId(),
       name: rawFolder?.name ?? '',
-      path: rawFolder?.path ?? ''
+      path: rawFolder?.path ?? '',
+      // Rust 侧迁移会补齐时间戳；这里只做防御性回落，避免脏数据产生 NaN 排序。
+      createdAt:
+        typeof rawFolder?.created_at === 'number' && Number.isFinite(rawFolder.created_at)
+          ? Math.max(0, Math.trunc(rawFolder.created_at))
+          : 0
     }))
   }))
   const rawCurrent = dto?.current_project ?? ''
@@ -46,7 +52,8 @@ export function toConfigDto(workspace: WorkspaceData): ConfigDto {
       folders: project.folders.map((folder) => ({
         id: folder.id,
         name: folder.name,
-        path: folder.path
+        path: folder.path,
+        created_at: folder.createdAt
       }))
     }))
   }

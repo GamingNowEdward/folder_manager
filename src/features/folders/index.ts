@@ -7,6 +7,15 @@ export {
   removeFolders,
   updateFolder
 } from './model/folder.model'
+export { sortFolders } from './model/folder-sort.model'
+export {
+  findFoldersByInitial,
+  folderInitial,
+  resolveEnterAction,
+  resolveQuickNavKey,
+  resolveQuickNavTarget
+} from './model/quick-nav.model'
+export type { EnterAction } from './model/quick-nav.model'
 export { resolveFolderShortcut } from './model/shortcut.model'
 export type { FolderShortcut } from './model/shortcut.model'
 export { useDirectoryPicker } from './composables/useDirectoryPicker'

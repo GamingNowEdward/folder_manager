@@ -148,6 +148,8 @@ pub struct FolderView {
     pub id: String,
     pub name: String,
     pub path: String,
+    /// 添加时间（Unix 毫秒），供 Agent 做「按添加日期」排序。
+    pub created_at: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -290,6 +292,7 @@ impl From<&Folder> for FolderView {
             id: folder.id.clone(),
             name: folder.name.clone(),
             path: folder.path.clone(),
+            created_at: folder.created_at,
         }
     }
 }
@@ -827,6 +830,11 @@ mod tests {
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["name"], "agent-target");
         assert_eq!(body["path"], expected_canonical(&dir));
+        // 新添加的文件夹必须带添加时间（供「按添加日期」排序）
+        assert!(
+            body["created_at"].as_i64().is_some_and(|time| time > 0),
+            "created_at 必须是正数: {body}"
+        );
         // 写进配置的路径不能带 Windows 扩展长度前缀（\\?\）
         assert!(!body["path"].as_str().unwrap().starts_with(r"\\?\"));
         assert!(body["id"].as_str().is_some_and(|it| !it.is_empty()));

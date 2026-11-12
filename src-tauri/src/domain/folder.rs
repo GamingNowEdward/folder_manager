@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
@@ -7,6 +9,16 @@ pub struct Folder {
     pub id: String,
     pub name: String,
     pub path: String,
+    /// 添加时间（Unix 毫秒）。与显示名/路径无关，用于「添加日期」排序。
+    pub created_at: i64,
+}
+
+/// 当前 Unix 毫秒；系统时钟异常时回落 0（由迁移流程补齐）。
+pub(crate) fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 impl Folder {
@@ -15,6 +27,7 @@ impl Folder {
             id: Uuid::new_v4().to_string(),
             name: name.into(),
             path: path.into(),
+            created_at: now_ms(),
         }
     }
 }
@@ -143,11 +156,13 @@ mod tests {
                 id: "f1".to_string(),
                 name: "src".to_string(),
                 path: "C:\\work\\src".to_string(),
+                created_at: 0,
             },
             Folder {
                 id: "f2".to_string(),
                 name: "docs".to_string(),
                 path: "D:\\docs".to_string(),
+                created_at: 0,
             },
         ]
     }

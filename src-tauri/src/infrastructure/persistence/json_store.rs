@@ -161,7 +161,7 @@ mod tests {
         assert_eq!(fs::read_to_string(backup).unwrap(), legacy);
         assert!(fs::read_to_string(&path)
             .unwrap()
-            .contains("\"version\": 2"));
+            .contains("\"version\": 3"));
     }
 
     #[test]

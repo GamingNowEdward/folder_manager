@@ -3,9 +3,11 @@
 ## 项目概述
 文件夹快速访问管理工具（Folder Manager）：按"项目"分组管理常用文件夹，支持双击打开、复制路径、拖拽排序、框选多选批量删除、从资源管理器拖入自动添加。
 
-- 数据模型：`Project { id, name, folders }` → `Folder { id, name, path }`，stable id 为业务身份，UI index 仅用于渲染。
+- 数据模型：`Project { id, name, folders }` → `Folder { id, name, path, createdAt }`（`createdAt` 为添加时间，Unix 毫秒），stable id 为业务身份，UI index 仅用于渲染。
 - 持久化：Rust 端读写 `config.json`（release 构建保存在 exe 同目录，便于便携分发；debug 构建保存在系统应用数据目录）。
-- 配置格式：`version: 2`；旧版（无 `version`）自动迁移并补齐 id；覆盖旧格式前生成 `config.json.bak`；损坏文件隔离为 `config.json.corrupt-<时间戳>.bak`。
+- 配置格式：`version: 3`；旧版（无 `version` / v1 / v2）自动迁移并补齐 id 与 `created_at`（按原数组顺序递增，顺序不变）；覆盖旧格式前生成 `config.json.bak`；损坏文件隔离为 `config.json.corrupt-<时间戳>.bak`。
+- 排序：显示顺序由 `shared/model/folder-sort` + `features/folders/model/folder-sort.model` 计算，**不写回底层数组**；`custom`（拖拽顺序）才能拖拽排序，字母 / 添加日期排序下拖拽被禁用。排序偏好存 `localStorage`（全局），数组顺序即自定义顺序。
+- 快捷键：字母 / 数字首字母定位（按显示名/备注匹配、同键循环）、`Enter` 打开、`Shift+Enter` 复制路径、`Delete` 删除、`Ctrl+A` 全选；快捷键只在无对话框、非输入控件、非拖拽/框选/排序菜单打开时生效。
 - 窗口效果：Windows 上通过 DWM API 启用 Acrylic 亚克力背景（`src-tauri/src/infrastructure/windows/acrylic.rs`）。
 - 本地 HTTP API：随应用启动，只绑定 `127.0.0.1:17890`，供外部 Agent 读写项目/文件夹；文档见 `docs/API.md`。
   - 端口可在应用内「设置」（侧边栏底部）修改，持久化到 `settings.json`（与 `config.json` 同目录），保存后重启生效；解析优先级 `FOLDER_MANAGER_API_PORT` > `settings.json` > `17890`。
@@ -21,11 +23,11 @@
 ### 目录结构
 - `src/app/` — 组合根：`AppShell`、`bootstrap`、`TitleBar/StatusBar/DialogHost`、全局交互（`useGlobalInteractions`）
 - `src/features/projects/` — 项目领域：`project.model`、`project.store`、`useProjectActions`、Sidebar/ProjectDialog
-- `src/features/folders/` — 文件夹领域：`folder.model`、`folder.store`（当前项目文件夹操作层，状态归 project store）、`useFolderActions`、FolderCard/AddFolderCard/FolderDialog/FolderWorkspace
+- `src/features/folders/` — 文件夹领域：`folder.model`、`folder-sort.model`（三种排序）、`quick-nav.model`（首字母定位 / Enter）、`folder.store`（当前项目文件夹操作层，状态归 project store）、`useFolderActions`、`useFolderShortcuts`、FolderCard/AddFolderCard/FolderDialog/FolderWorkspace/FolderSortMenu
 - `src/features/selection/` — 选择：`useFolderSelection`、`useBoxSelection`
 - `src/features/drag-drop/` — 拖拽：`useFolderDragDrop`、`useExternalDrop`、命中测试纯函数
 - `src/features/dialogs/` — 对话框编排：`useDialogs`、ConfirmDialog
-- `src/shared/` — 跨 feature 的常量、工具、UI 偏好（`preferences.store`：文件夹视图模式）与 status store
+- `src/shared/` — 跨 feature 的常量、工具、UI 偏好（`preferences.store`：文件夹视图模式、三种排序方式与方向，保存在 `localStorage`）与 status store
 - `src/infrastructure/tauri/` — Tauri IPC adapters（config / system / dialog / window / event）
 - `src/types/index.ts` — 领域类型
 - `src-tauri/src/` — `commands/`（薄 IPC 层）、`application/`（编排）、`domain/`（模型与业务规则）、`infrastructure/`（JSON 持久化、Windows 集成、`paths` 路径规范化、`http` 本地 API）、`error.rs`

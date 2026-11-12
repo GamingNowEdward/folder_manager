@@ -10,17 +10,21 @@ import {
 } from './folder.model'
 import type { Folder } from '@/types'
 
-function folder(id: string, name: string, path = `C:\\${name}`): Folder {
-  return { id, name, path }
+function folder(id: string, name: string, path = `C:\\${name}`, createdAt = 0): Folder {
+  return { id, name, path, createdAt }
 }
 
 const folders = [folder('f1', 'A'), folder('f2', 'B'), folder('f3', 'C')]
 
 describe('folder.model', () => {
   it('creates a folder with a generated id', () => {
+    const before = Date.now()
     const created = createFolder('A', 'C:\\A')
+    const after = Date.now()
     expect(created.id).toBeTruthy()
     expect(created).toMatchObject({ name: 'A', path: 'C:\\A' })
+    expect(created.createdAt).toBeGreaterThanOrEqual(before)
+    expect(created.createdAt).toBeLessThanOrEqual(after)
   })
 
   it('adds folders and rejects duplicate names', () => {
@@ -39,6 +43,8 @@ describe('folder.model', () => {
     expect(findFolderById(folders, 'f2')?.name).toBe('B')
     const next = updateFolder(folders, 'f2', 'B2', 'C:\\B2')
     expect(next[1]).toMatchObject({ id: 'f2', name: 'B2', path: 'C:\\B2' })
+    // 编辑不改变添加时间，否则「添加日期」排序会漂移
+    expect(next[1].createdAt).toBe(folders[1].createdAt)
     expect(folders[1].name).toBe('B')
   })
 
